@@ -1,0 +1,106 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProductVersion>8.0.30703</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{1AE9D713-0F72-4529-B393-3F99CEE75253}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>TSystems</RootNamespace>
+    <AssemblyName>ReloadClass</AssemblyName>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="DnDns">
+      <HintPath>..\Lib\DnDns.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Ccr.Core">
+      <HintPath>..\Lib\Microsoft.Ccr.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="SecureBlackbox">
+      <HintPath>..\Lib\SecureBlackbox.dll</HintPath>
+    </Reference>
+    <Reference Include="SecureBlackbox.PKI">
+      <HintPath>..\Lib\SecureBlackbox.PKI.dll</HintPath>
+    </Reference>
+    <Reference Include="SecureBlackbox.SSLClient">
+      <HintPath>..\Lib\SecureBlackbox.SSLClient.dll</HintPath>
+    </Reference>
+    <Reference Include="SecureBlackbox.SSLCommon">
+      <HintPath>..\Lib\SecureBlackbox.SSLCommon.dll</HintPath>
+    </Reference>
+    <Reference Include="SecureBlackbox.SSLServer">
+      <HintPath>..\Lib\SecureBlackbox.SSLServer.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Web.Extensions" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RELOAD\Topology\AccessControl.cs" />
+    <Compile Include="RELOAD\Util\BigInt.cs" />
+    <Compile Include="RELOAD\ForwardAndLinkManagement\ConnectionTable.cs" />
+    <Compile Include="RELOAD\Transport\Dialog.cs" />
+    <Compile Include="RELOAD\Enroll\Configuration.cs" />
+    <Compile Include="RELOAD\Enroll\Resolve.cs" />
+    <Compile Include="RELOAD\ForwardAndLinkManagement\Forwarding.cs" />
+    <Compile Include="RELOAD\Extension\GateWay.cs" />
+    <Compile Include="RELOAD\Extension\GatewayRequestHandler.cs" />
+    <Compile Include="RELOAD\Globals.cs" />
+    <Compile Include="RELOAD\Extension\GWMachine.cs" />
+    <Compile Include="RELOAD\Machine.cs" />
+    <Compile Include="RELOAD\Storage\DataTypes.cs" />
+    <Compile Include="RELOAD\Storage\Resource.cs" />
+    <Compile Include="RELOAD\Storage\StorageModul.cs" />
+    <Compile Include="RELOAD\Transport\Messages.cs" />
+    <Compile Include="RELOAD\Topology\Node.cs" />
+    <Compile Include="RELOAD\ForwardAndLinkManagement\Classes.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="RELOAD\ForwardAndLinkManagement\Simple.cs" />
+    <Compile Include="RELOAD\ForwardAndLinkManagement\TLS.cs" />
+    <Compile Include="RELOAD\ForwardAndLinkManagement\TLS.FLM.cs" />
+    <Compile Include="RELOAD\Usage\ReDiR.cs" />
+    <Compile Include="RELOAD\Topology\Signature.cs" />
+    <Compile Include="RELOAD\Util\Statistics.cs" />
+    <Compile Include="RELOAD\Topology\Topology.cs" />
+    <Compile Include="RELOAD\Transport\Transport.cs" />
+    <Compile Include="RELOAD\Usage\Usages.cs" />
+    <Compile Include="RELOAD\Util\Utils.cs" />
+  </ItemGroup>
+  <ItemGroup />
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>
