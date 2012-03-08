@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReloadClass", "ReloadClass\ReloadClass.csproj", "{1AE9D713-0F72-4529-B393-3F99CEE75253}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Reload.MDI", "Reload.MDI\Reload.MDI.csproj", "{43CFE3AF-2288-4F68-AF81-356EA2D64856}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1AE9D713-0F72-4529-B393-3F99CEE75253}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1AE9D713-0F72-4529-B393-3F99CEE75253}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1AE9D713-0F72-4529-B393-3F99CEE75253}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1AE9D713-0F72-4529-B393-3F99CEE75253}.Release|Any CPU.Build.0 = Release|Any CPU
+		{43CFE3AF-2288-4F68-AF81-356EA2D64856}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{43CFE3AF-2288-4F68-AF81-356EA2D64856}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{43CFE3AF-2288-4F68-AF81-356EA2D64856}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{43CFE3AF-2288-4F68-AF81-356EA2D64856}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
