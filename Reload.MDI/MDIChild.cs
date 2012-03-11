@@ -29,6 +29,8 @@ using System.Windows.Forms;
 using System.Data;
 using System.Diagnostics;
 using TSystems.RELOAD;
+using TSystems.RELOAD.Usage;
+using TSystems.RELOAD.Enroll;
 using System.IO;
 
 namespace ReloadMDI {
