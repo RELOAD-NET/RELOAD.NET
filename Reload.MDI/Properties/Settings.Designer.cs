@@ -284,12 +284,12 @@ namespace ReloadMDI.Properties {
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("True")]
-        public bool HAWEnrollment {
+        public bool IsVirtualServer {
             get {
-                return ((bool)(this["HAWEnrollment"]));
+                return ((bool)(this["IsVirtualServer"]));
             }
             set {
-                this["HAWEnrollment"] = value;
+                this["IsVirtualServer"] = value;
             }
         }
         

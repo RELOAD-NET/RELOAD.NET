@@ -30,6 +30,7 @@ using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using TSystems.RELOAD;
+using TSystems.RELOAD.Enroll;
 
 namespace ReloadMDI
 {

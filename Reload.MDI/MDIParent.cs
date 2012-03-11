@@ -452,7 +452,7 @@ namespace ReloadMDI
             ReloadGlobals.ForceLocalConfig = ReloadMDI.Properties.Settings.Default.ForceLocalConfig;
             ReloadGlobals.DNS_Address = ReloadMDI.Properties.Settings.Default.DNS_Address;
             ReloadGlobals.EnrollmentServer = ReloadMDI.Properties.Settings.Default.EnrollmentServer;
-            ReloadGlobals.HAW_Enrollment = ReloadMDI.Properties.Settings.Default.HAWEnrollment;
+            ReloadGlobals.IsVirtualServer = ReloadMDI.Properties.Settings.Default.IsVirtualServer;
             ReloadGlobals.AllowPrivateIP = ReloadMDI.Properties.Settings.Default.AllowPrivateIP;
             ReloadGlobals.MaxRetransmissions = ReloadMDI.Properties.Settings.Default.MaxRetransmissions;
             ReloadGlobals.SUCCESSOR_CACHE_SIZE = ReloadMDI.Properties.Settings.Default.SuccessorCacheSize;

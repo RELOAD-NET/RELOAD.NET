@@ -68,7 +68,7 @@
     <Setting Name="EnrollmentServer" Type="System.String" Scope="User">
       <Value Profile="(Default)">http://enroll.t-reload.realmv6.org/p2psip/enroll/</Value>
     </Setting>
-    <Setting Name="HAWEnrollment" Type="System.Boolean" Scope="User">
+    <Setting Name="IsVirtualServer" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">True</Value>
     </Setting>
     <Setting Name="AllowPrivateIP" Type="System.Boolean" Scope="User">
