@@ -113,6 +113,12 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 
                 /* Setup new TLS Server */
                 ReloadTLSServer reload_server = new ReloadTLSServer(associatedSocket);
+                if (ReloadGlobals.only_RSA_NULL_MD5 == true) {
+                  for (short i = 0; i < 107; i++) {
+                    reload_server.set_CipherSuites(i, false);
+                  }
+                  reload_server.set_CipherSuites(SBConstants.__Global.SB_SUITE_RSA_NULL_MD5, true);
+                }
                 //reload_client.Enabled = !ReloadGlobals.TLS_PASSTHROUGH; --joscha
                 reload_server.Enabled = true;   //--joscha
                 reload_server.ForceCertificateChain = false;
@@ -254,7 +260,13 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 }
 
                 ReloadTLSClient reload_client = new ReloadTLSClient(socket);
-                reload_client = new ReloadTLSClient(socket);
+                if (ReloadGlobals.only_RSA_NULL_MD5 == true) {
+                  for (short i = 0; i < 107; i++) {
+                    reload_client.set_CipherSuites(i, false);
+                  }
+                  reload_client.set_CipherSuites(SBConstants.__Global.SB_SUITE_RSA_NULL_MD5, true);
+                }
+                //reload_client = new ReloadTLSClient(socket);
                 //reload_client.Enabled = !ReloadGlobals.TLS_PASSTHROUGH; --joscha
                 reload_client.Versions = SBConstants.Unit.sbSSL2 | SBConstants.Unit.sbSSL3 | SBConstants.Unit.sbTLS1 | SBConstants.Unit.sbTLS11;
                 reload_client.ClientCertStorage = m_ReloadConfig.ReloadLocalCertStorage;
