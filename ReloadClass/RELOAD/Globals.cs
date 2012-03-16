@@ -253,6 +253,7 @@ namespace TSystems.RELOAD {
     public static int MaxTimeToSendPacket = 10000;//6000;
     public static int MaxRetransmissions = 4;
     public static bool TLS_PASSTHROUGH = false;
+    public static bool only_RSA_NULL_MD5 = false;
     public static bool AllowPrivateIP = false;
 
     public static UInt32 SIP_REGISTRATION_KIND_ID = 1234;
@@ -302,7 +303,7 @@ namespace TSystems.RELOAD {
     public static int MAX_RESOURCE_ID_DIGITS = 20;   /* To carry 160 bits maximum */
     public static int DICTIONARY_KEY_LENGTH = 16;
     public static NodeId WildcardNodeId = new NodeId(HexStringConverter.ToByteArray("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"));
-   
+
     public static string SBB_LICENSE_SBB8_KEY = "Insert here your licence key";
     public static string SBB_LICENSE_PKI8_KEY = "Insert here your licence key";
 
