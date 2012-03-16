@@ -1166,8 +1166,8 @@ namespace TSystems.RELOAD.Usage {
 
         node = (UInt16)(System.Net.IPAddress.NetworkToHostOrder(reader.ReadInt16()));
 
-        int templength = (UInt16)(System.Net.IPAddress.NetworkToHostOrder(reader.ReadInt16()));
-        reader.Read(new byte[templength],0,templength);//TODO: remove this
+        //int templength = (UInt16)(System.Net.IPAddress.NetworkToHostOrder(reader.ReadInt16()));
+        //reader.Read(new byte[templength],0,templength);//TODO: remove this
 
         string resourceName = (nameSpace + "," + level + "," + node);
 
@@ -1228,8 +1228,8 @@ namespace TSystems.RELOAD.Usage {
       writer.Write(System.Net.IPAddress.HostToNetworkOrder((int)(DataValueEndPosition - DataValueLengthPosition - 4)));
       writer.BaseStream.Seek(DataValueEndPosition, SeekOrigin.Begin);
 
-      byte[] threek = new byte[3000];
-      length_new += ReloadGlobals.WriteOpaqueValue(writer,threek,0xFFFF); //TODO: remove this
+      //byte[] threek = new byte[3000];
+      //length_new += ReloadGlobals.WriteOpaqueValue(writer,threek,0xFFFF); //TODO: remove this
 
       return length_new;
 

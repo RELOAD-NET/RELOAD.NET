@@ -117,6 +117,28 @@ namespace TSystems.RELOAD.Utils {
       return writtenBytes;
     }
 
+    public static UInt16 WrittenBytesShortExcludeLength(long posBeforeWrite,
+      BinaryWriter writer) {
+      long posAfterWrite = writer.BaseStream.Position;
+      UInt16 writtenBytes = (UInt16)(posAfterWrite - posBeforeWrite - 2);
+      writer.BaseStream.Seek(posBeforeWrite, SeekOrigin.Begin);
+      writer.Write(IPAddress.HostToNetworkOrder((short)writtenBytes));
+      writer.BaseStream.Seek(posAfterWrite, SeekOrigin.Begin);
+
+      return writtenBytes;
+    }
+
+    public static UInt32 WrittenBytesExcludeLength(long posBeforeWrite,
+      BinaryWriter writer) {
+      long posAfterWrite = writer.BaseStream.Position;
+      long writtenBytes = posAfterWrite - posBeforeWrite - 4;
+      writer.BaseStream.Seek(posBeforeWrite, SeekOrigin.Begin);
+      writer.Write(IPAddress.HostToNetworkOrder((int)writtenBytes));
+      writer.BaseStream.Seek(posAfterWrite, SeekOrigin.Begin);
+
+      return (UInt32)writtenBytes;
+    }
+
     /// <summary>
     /// Return the amount in bytes of data read already by the reader starting
     /// by posBeforeRead.
