@@ -57,6 +57,8 @@ namespace TSystems.RELOAD.Storage {
     public void AddStoredData(UInt32 kindId, StoredData storedData, UInt64 generation) {
 
       ReloadGlobals.DataModel data_model = storedData.Value.DataModel;
+      if (storedData.Signature == null)
+        storedData.SignData(resId, kindId, m_ReloadConfig.AccessController.MyIdentity, m_ReloadConfig); //sign before store
       string residstr = resId.ToString();
       if (!this.generation.ContainsKey(kindId))
         this.generation.Add(kindId, generation); // MUST check generation counter TODO

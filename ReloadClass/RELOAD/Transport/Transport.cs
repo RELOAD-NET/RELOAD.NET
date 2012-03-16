@@ -2477,9 +2477,9 @@ namespace TSystems.RELOAD.Transport {
         if (reloadMsg == null) {
           m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "receive_message: reloadMsg = null!!");
           return;
-        }        
+        }
 
-        if (reloadMsg.IsFragmented()) {  // -- joscha
+        if (reloadMsg.IsFragmented() && reloadMsg.IsSingleFragmentMessage() == false) {  // -- joscha
           ReloadMessage reassembledMsg = reloadMsg.ReceiveFragmentedMessage(ref fragmentedMessageBuffer);
           if (reassembledMsg == null) //not yet all fragments received => not reassembled
             return;

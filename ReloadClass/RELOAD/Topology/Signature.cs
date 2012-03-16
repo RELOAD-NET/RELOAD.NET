@@ -218,7 +218,7 @@ namespace TSystems.RELOAD.Topology {
       sr.Close();
       bw.Close();
       /* Concatenate signature input */
-      String signaturInput = String.Format("{0}{1}{2}{3}{5}",
+      String signaturInput = String.Format("{0}{1}{2}{3}{4}",
         ascii.GetString(resId.Data, 0, resId.Data.Length), kind, storageTime,
         strValue, identity.ToString());
       signatureValue = Sign(signaturInput);
