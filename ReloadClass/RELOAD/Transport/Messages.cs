@@ -490,6 +490,21 @@ namespace TSystems.RELOAD.Transport {
       return (0 != (forwarding_header.fragment & 0x80000000));
     }
 
+    public bool IsSingleFragmentMessage() {
+      uint fragment_offset = (forwarding_header.fragment & 0x3FFFFFFF);
+      bool last_fragment = ((forwarding_header.fragment & 0x40000000) != 0);
+
+      if (fragment_offset == 0 && last_fragment == true) {
+        //single fragment message (means not fragmented)
+        return true;
+      }
+      return false;
+    }
+
+    public bool NeedsReassembling() {
+      return (IsFragmented() == true && IsSingleFragmentMessage() == false);
+    }
+
     public ReloadMessage(ReloadConfig rc, NodeId OriginatorNodeID,
       Destination destination, UInt64 trans_id, RELOAD_MessageBody reload_content) {
       m_ReloadConfig = rc;
@@ -934,6 +949,12 @@ namespace TSystems.RELOAD.Transport {
         /* ttl */
         writer.Write((Byte)forwarding_header.ttl);
         /* fragment */
+        /* If the message is not
+           fragmented, it is simply treated as if it is the only fragment:  the
+           last fragment bit is set and the offset is 0 resulting in a fragment
+           value of 0xC0000000. */
+        /* fragmented messages are processed by ToBytesFragmented*/
+        forwarding_header.fragment = 0xC0000000;
         writer.Write(IPAddress.HostToNetworkOrder(
           (int)forwarding_header.fragment));
         /* length */
@@ -986,8 +1007,9 @@ namespace TSystems.RELOAD.Transport {
             String.Format("Msg Body Dump(): {0}", e.Message));
         }
 
-        if (this.IsFragmented())    //if msg is fragmented there are no more bytes after the fragment body
-                {
+        if (this.IsFragmented() && this.IsSingleFragmentMessage() == false) {
+          //if msg is (real) fragmented there are no more bytes after the fragment body
+                
           //length of this fragment
           forwarding_header.length = (uint)msEnd;
 
@@ -1118,14 +1140,19 @@ namespace TSystems.RELOAD.Transport {
 
           long reload_msg_begin = ms.Position;
 
-          if (0 != (forwarding_header.fragment & 0x80000000)) //is this a fragment?
-                    {
+          if (0 != (forwarding_header.fragment & 0x80000000)) { //is this a fragment?
             uint fragment_offset = (forwarding_header.fragment & 0x3FFFFFFF);
             bool last_fragment = ((forwarding_header.fragment & 0x40000000) != 0);
-            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FRAGMENTATION, String.Format("Fragmented Message: offset " + fragment_offset));
-            reload_message_body = new MessageFragment(RELOAD_MessageCode.Invalid, fragment_offset, last_fragment).FromReader(this, reader, forwarding_header.length - reload_msg_begin);  //this should be the fragmentsize instead of ms.Length better use forwardingheader.length TODO: FIX it
-            offset = ms.Position;
-            return this;
+
+            if (fragment_offset == 0 && last_fragment == true) {
+              //single fragment message (means not fragmented) => process as usual
+            }
+            else {
+              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FRAGMENTATION, String.Format("Fragmented Message: offset " + fragment_offset));
+              reload_message_body = new MessageFragment(RELOAD_MessageCode.Invalid, fragment_offset, last_fragment).FromReader(this, reader, forwarding_header.length - reload_msg_begin);  //this should be the fragmentsize instead of ms.Length better use forwardingheader.length TODO: FIX it
+              offset = ms.Position;
+              return this;
+            }
           }
 
           // now turn to message body
@@ -1765,6 +1792,9 @@ namespace TSystems.RELOAD.Transport {
           writer.Write(IPAddress.HostToNetworkOrder((int)stored_data.LifeTime));
           stored_data.Value.Dump(writer);
           stored_data.Value.GetUsageValue.dump(writer);
+          stored_data.SignData(ResourceId, kind.Kind,
+            myManager.m_ReloadConfig.AccessController.MyIdentity,
+            myManager.m_ReloadConfig);
           stored_data.Signature.Dump(writer);
           StreamUtil.WrittenBytesExcludeLength(posBeforeSD, writer);
           //length += stored_data.Length;
@@ -1857,7 +1887,8 @@ namespace TSystems.RELOAD.Transport {
                   throw new NotSupportedException(String.Format("The data_model {0} is not supported", data_model));
               }
               StoredData stored_data = new StoredData(storage_time, lifetime, stored_data_value);
-
+              stored_data.Signature = new Signature(myManager.m_ReloadConfig).FromReader(reader, reload_msg_size);
+              // TODO Process signature
               store_kind_data.Add(stored_data);
               appendStoreKindData(store_kind_data);
             }
@@ -2226,7 +2257,8 @@ namespace TSystems.RELOAD.Transport {
           // Write Usage data
           stored_data.Value.GetUsageValue.dump(writer);
           // Write the Signature
-          // TODO stored_data.Signature.Dump(writer);
+          stored_data.Signature.Dump(writer); 
+          //TODO stored_data.Signature.Dump(writer);
           StreamUtil.WrittenBytesExcludeLength(posBeforeSD, writer);
         }
         StreamUtil.WrittenBytesExcludeLength(posBeforeSDs, writer);
@@ -2313,6 +2345,8 @@ namespace TSystems.RELOAD.Transport {
               }
               StoredData stored_data = new StoredData(storage_time,
                 lifetime, stored_data_value);
+              stored_data.Signature = new Signature(myManager.m_ReloadConfig).FromReader(reader, reload_msg_size);
+              // TODO Process signature
               values.Add(stored_data);
             } // end read StoredData
             kind_response.kind = kind;

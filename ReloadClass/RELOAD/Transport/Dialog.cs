@@ -155,7 +155,7 @@ namespace TSystems.RELOAD.Transport {
                 yield return Arbiter.Choice(
                     Arbiter.Receive(false, timeouted, to =>
                     {
-                        //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, String.Format("Receiver {0} Rx Timeout", rx_filter.transactionID));
+                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, String.Format("Receiver {0} Rx Timeout", rx_filter.transactionID));
                         fTimeouted = true;
                     }),
                     Arbiter.Receive(false, m_portWaitForRx, trigger =>
@@ -185,7 +185,7 @@ namespace TSystems.RELOAD.Transport {
                                     break;
                                 }
                                 //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Receiver {0} Queuecount {1} Transactionid: {2}", rx_filter.transactionID, m_Queue.Count, reloadMsg.TransactionID));
-                                if (reloadMsg.IsFragmented() && rx_filter != null && reloadMsg.TransactionID == rx_filter.transactionID) 
+                                if (reloadMsg.IsFragmented() && reloadMsg.IsSingleFragmentMessage() == false && rx_filter != null && reloadMsg.TransactionID == rx_filter.transactionID) 
                                 {
                                     ReloadMessage reassembledMsg = reloadMsg.ReceiveFragmentedMessage(ref fragmentedMessageBuffer);
                                     if (reassembledMsg == null) //not yet all fragments received => not reassembled
