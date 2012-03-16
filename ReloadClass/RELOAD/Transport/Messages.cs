@@ -424,7 +424,7 @@ namespace TSystems.RELOAD.Transport {
         writer.Write((byte)pkc.Type);
         ReloadGlobals.WriteOpaqueValue(writer, defEncode.GetBytes(pkc.Certificate), 0xFFFF);
       }
-      StreamUtil.WrittenBytesShort(posBeforeCerts, writer);
+      StreamUtil.WrittenBytesShortExcludeLength(posBeforeCerts, writer);
       signature.Dump(writer);
       return (UInt16)(writer.BaseStream.Position - posBeforeCerts);
 
@@ -1004,17 +1004,17 @@ namespace TSystems.RELOAD.Transport {
         // no message extensions so far -> length null 
         writer.Write(IPAddress.HostToNetworkOrder((int)SizeOfMessageExtensions));
 
-        long Endposition = ms.Position;
+        //long Endposition = ms.Position;
 
         //go to position of message length tag after the 2 bytes message code tag
-        ms.Seek(BeforeMsgPosition + 2, SeekOrigin.Begin);
+        //ms.Seek(BeforeMsgPosition + 2, SeekOrigin.Begin);
         /* write the four bytes message length value minus length and code tag
          * length and message extension size which is 6+4
          */
-        long msgBodyLength = Endposition - BeforeMsgPosition - 10;
-        writer.Write(IPAddress.HostToNetworkOrder((int)(msgBodyLength)));
+        //long msgBodyLength = Endposition - BeforeMsgPosition - 10;
+        //writer.Write(IPAddress.HostToNetworkOrder((int)(msgBodyLength)));
 
-        ms.Seek(Endposition, SeekOrigin.Begin);
+        //ms.Seek(Endposition, SeekOrigin.Begin);
 
         if (ReloadGlobals.TLS &&
           security_block.Certificates.Count != 0) {
@@ -1518,7 +1518,8 @@ namespace TSystems.RELOAD.Transport {
         length += (UInt32)ReloadGlobals.NODE_ID_DIGITS;
         writer.Write(m_ID.Data);
       }
-      writer.Write((byte)0);
+      //writer.Write((byte)0);
+      ReloadGlobals.WriteOpaqueValue(writer, new System.Text.ASCIIEncoding().GetBytes("NONE")  , 0xFFFF);
       return length + 1;
     }
     public override RELOAD_MessageBody FromReader(ReloadMessage rm, BinaryReader reader, long reload_msg_size) {
@@ -1534,7 +1535,8 @@ namespace TSystems.RELOAD.Transport {
           m_ID = new NodeId(reader.ReadBytes(ReloadGlobals.NODE_ID_DIGITS));
           length += ReloadGlobals.NODE_ID_DIGITS;
         }
-        reader.ReadByte();
+        UInt16 overlay_specific_dataLen = (UInt16)IPAddress.NetworkToHostOrder(reader.ReadInt16());
+        byte[] overlay_specific_data = reader.ReadBytes(overlay_specific_dataLen);
 
         //skip the overlay_specific_data field (still not defined for Join)
         reload_msg_size = reload_msg_size - (length + 1);
@@ -1763,14 +1765,14 @@ namespace TSystems.RELOAD.Transport {
           writer.Write(IPAddress.HostToNetworkOrder((int)stored_data.LifeTime));
           stored_data.Value.Dump(writer);
           stored_data.Value.GetUsageValue.dump(writer);
-          // TOOD stored_data.Signature.Dump(writer);
-          StreamUtil.WrittenBytes(posBeforeSD, writer);
+          stored_data.Signature.Dump(writer);
+          StreamUtil.WrittenBytesExcludeLength(posBeforeSD, writer);
           //length += stored_data.Length;
         }
         /* Write the amount of bytes written for StoredData objects */
-        StreamUtil.WrittenBytes(posBeforeSDs, writer);
+        StreamUtil.WrittenBytesExcludeLength(posBeforeSDs, writer);
       }
-      StreamUtil.WrittenBytes(posBeforeSDKs, writer);
+      StreamUtil.WrittenBytesExcludeLength(posBeforeSDKs, writer);
 
       return length; // length is obsolet
     }
@@ -2059,9 +2061,9 @@ namespace TSystems.RELOAD.Transport {
             throw new NotSupportedException(String.Format(
               "Kind Id {0} is not supported!", specifier.kindId));
         }
-        StreamUtil.WrittenBytesShort(posBeforeIndex, writer);
+        StreamUtil.WrittenBytesShortExcludeLength(posBeforeIndex, writer);
       }
-      UInt16 len = StreamUtil.WrittenBytesShort(posBeforSpec, writer);
+      UInt16 len = StreamUtil.WrittenBytesShortExcludeLength(posBeforSpec, writer);
 
       return length;
     }
@@ -2225,11 +2227,11 @@ namespace TSystems.RELOAD.Transport {
           stored_data.Value.GetUsageValue.dump(writer);
           // Write the Signature
           // TODO stored_data.Signature.Dump(writer);
-          StreamUtil.WrittenBytes(posBeforeSD, writer);
+          StreamUtil.WrittenBytesExcludeLength(posBeforeSD, writer);
         }
-        StreamUtil.WrittenBytes(posBeforeSDs, writer);
+        StreamUtil.WrittenBytesExcludeLength(posBeforeSDs, writer);
       }
-      StreamUtil.WrittenBytes(posBeforeResp, writer);
+      StreamUtil.WrittenBytesExcludeLength(posBeforeResp, writer);
       return length;
     }
 

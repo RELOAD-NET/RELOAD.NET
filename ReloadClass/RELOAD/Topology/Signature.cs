@@ -308,13 +308,16 @@ namespace TSystems.RELOAD.Topology {
         writer.Write((byte)algorithm.signature);
         /* Write identity */
         writer.Write((byte)identity.IdentityType);
-        writer.Write(IPAddress.HostToNetworkOrder((short)identity.Length));
+        long posBeforeIdentity = writer.BaseStream.Position;
+        /* Placeholder for length of identity */
+        writer.Write(IPAddress.HostToNetworkOrder((short)0));
         /* Write identity value */
         writer.Write((byte)identity.Identity.HashAlg);
         byte hashLen = (Byte)identity.Identity.CertificateHash.Length;
         writer.Write(hashLen);
         byte[] hash = ascii.GetBytes(identity.Identity.CertificateHash);
         writer.Write(hash);
+        StreamUtil.WrittenBytesShortExcludeLength(posBeforeIdentity, writer);
         /* Write signature value */
         ReloadGlobals.WriteOpaqueValue(writer, signatureValue, 0xFFFF);
         return (UInt32)(writer.BaseStream.Position - posBeforeSign);

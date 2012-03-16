@@ -216,8 +216,8 @@ namespace TSystems.RELOAD.Storage {
                 return 5; // 4 bytes int + 1 byte Boolean
             }
             if (dictionary_entry.value.value != null) {
-                UInt16 key_length = (UInt16)ReloadGlobals.WriteOpaqueValue(writer, Encoding.ASCII.GetBytes(dictionary_entry.key), 0xFFFF);
-
+                //UInt16 key_length = (UInt16)ReloadGlobals.WriteOpaqueValue(writer, Encoding.ASCII.GetBytes(dictionary_entry.key), 0xFFFF);
+                UInt16 key_length = (UInt16)ReloadGlobals.WriteOpaqueValue(writer, HexStringConverter.ToByteArray(dictionary_entry.key), 0xFFFF);
                 Byte exists = (byte)(dictionary_entry.value.exists == true ? 1 : 0);
                 writer.Write(exists);
 
