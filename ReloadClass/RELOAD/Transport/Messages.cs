@@ -422,7 +422,11 @@ namespace TSystems.RELOAD.Transport {
       writer.Write(IPAddress.HostToNetworkOrder((short)0));
       foreach (GenericCertificate pkc in certificates) {
         writer.Write((byte)pkc.Type);
-        ReloadGlobals.WriteOpaqueValue(writer, defEncode.GetBytes(pkc.Certificate), 0xFFFF);
+        byte[] bcert = ascii.GetBytes(pkc.Certificate);
+        TElX509Certificate cert = new TElX509Certificate();
+        cert.LoadFromBufferPEM(bcert,"");
+        cert.SaveToBuffer(out bcert);
+        ReloadGlobals.WriteOpaqueValue(writer, bcert, 0xFFFF);
       }
       StreamUtil.WrittenBytesShortExcludeLength(posBeforeCerts, writer);
       signature.Dump(writer);
@@ -444,7 +448,12 @@ namespace TSystems.RELOAD.Transport {
       while (StreamUtil.ReadBytes(posBeforeCerts, reader) < certLen) {
         var type = (CertificateType)reader.ReadByte();
         UInt16 len = (UInt16)IPAddress.NetworkToHostOrder(reader.ReadInt16());
-        string pkc = defEncode.GetString(reader.ReadBytes(len), 0, len);
+        //string pkc = defEncode.GetString(reader.ReadBytes(len), 0, len);
+        TElX509Certificate cert = new TElX509Certificate();
+        cert.LoadFromBuffer(reader.ReadBytes(len));
+        Byte[] bcert;
+        cert.SaveToBufferPEM(out bcert, "");
+        String pkc = ascii.GetString(bcert);
         certificates.Add(new GenericCertificate(pkc));
       }
       signature = new Signature(m_ReloadConfig).FromReader(reader, reloadMsgSize);
@@ -2951,13 +2960,13 @@ namespace TSystems.RELOAD.Transport {
       writer.Write(IPAddress.HostToNetworkOrder((int)length));
 
       if (RELOAD_MsgCode == RELOAD_MessageCode.Update_Request) {
-        writer.Write((Byte)m_type);
-        length = length + 1;
-
         int UpTimeSeconds = (int)(DateTime.Now - m_UpTime).TotalSeconds;
 
         writer.Write(IPAddress.HostToNetworkOrder((int)UpTimeSeconds));
         length = length + 4;
+
+        writer.Write((Byte)m_type);
+        length = length + 1;
 
         switch (m_type) {
           case ChordUpdateType.full:
@@ -3014,12 +3023,12 @@ namespace TSystems.RELOAD.Transport {
         m_predecessors.Clear();
 
         if (RELOAD_MsgCode == RELOAD_MessageCode.Update_Request) {
-          m_type = (ChordUpdateType)reader.ReadByte();
-          reload_msg_size -= 1;
-
           UInt32 TotalSeconds = (UInt32)IPAddress.NetworkToHostOrder(
             reader.ReadInt32());
           reload_msg_size -= 4;
+
+          m_type = (ChordUpdateType)reader.ReadByte();
+          reload_msg_size -= 1;
 
           int iLengthOfPredecessors = IPAddress.NetworkToHostOrder(
             reader.ReadInt16());
