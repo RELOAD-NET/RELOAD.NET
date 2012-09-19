@@ -1,5 +1,5 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-* Copyright (C) 2012 Thomas Kluge <t.kluge@gmx.de> 
+* Copyright (C) 2012, Telekom Deutschland GmbH 
 *
 * This file is part of RELOAD.NET.
 *
@@ -18,7 +18,6 @@
 *
 * see https://github.com/RELOAD-NET/RELOAD.NET
 * 
-* Last edited by: Alex <alexander.knauf@gmail.com>
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 using System;
@@ -451,7 +450,8 @@ namespace ReloadMDI
             ReloadGlobals.TRACELEVEL = (ReloadGlobals.TRACEFLAGS)ReloadMDI.Properties.Settings.Default.TraceLevel;
             ReloadGlobals.ForceLocalConfig = ReloadMDI.Properties.Settings.Default.ForceLocalConfig;
             ReloadGlobals.DNS_Address = ReloadMDI.Properties.Settings.Default.DNS_Address;
-            ReloadGlobals.EnrollmentServer = ReloadMDI.Properties.Settings.Default.EnrollmentServer;
+            ReloadGlobals.OverlayName = ReloadMDI.Properties.Settings.Default.OverlayName;
+            ReloadGlobals.ConfigurationServer = ReloadMDI.Properties.Settings.Default.ConfigurationServer;
             ReloadGlobals.IsVirtualServer = ReloadMDI.Properties.Settings.Default.IsVirtualServer;
             ReloadGlobals.AllowPrivateIP = ReloadMDI.Properties.Settings.Default.AllowPrivateIP;
             ReloadGlobals.MaxRetransmissions = ReloadMDI.Properties.Settings.Default.MaxRetransmissions;

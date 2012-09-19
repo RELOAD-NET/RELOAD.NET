@@ -6,7 +6,7 @@
       <Value Profile="(Default)">True</Value>
     </Setting>
     <Setting Name="ReportURL" Type="System.String" Scope="Application">
-      <Value Profile="(Default)">http://141.22.26.238/dataentry.aspx</Value>
+      <Value Profile="(Default)">https://saints.bercos.de/test/generic_tests/reload/dataentry.aspx</Value>
     </Setting>
     <Setting Name="ReportIncludeTopology" Type="System.Boolean" Scope="Application">
       <Value Profile="(Default)">True</Value>
@@ -47,9 +47,6 @@
     <Setting Name="IgnoreSSLErrors" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">True</Value>
     </Setting>
-    <Setting Name="DNS_Address" Type="System.String" Scope="User">
-      <Value Profile="(Default)">141.22.26.233</Value>
-    </Setting>
     <Setting Name="ReportIncludeConnections" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">True</Value>
     </Setting>
@@ -65,20 +62,26 @@
     <Setting Name="Framing" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">True</Value>
     </Setting>
-    <Setting Name="EnrollmentServer" Type="System.String" Scope="User">
-      <Value Profile="(Default)">http://enroll.t-reload.realmv6.org/p2psip/enroll/</Value>
-    </Setting>
     <Setting Name="IsVirtualServer" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">True</Value>
     </Setting>
     <Setting Name="AllowPrivateIP" Type="System.Boolean" Scope="User">
-      <Value Profile="(Default)">True</Value>
+      <Value Profile="(Default)">False</Value>
     </Setting>
     <Setting Name="RetransmissionTime" Type="System.Int32" Scope="User">
       <Value Profile="(Default)">3000</Value>
     </Setting>
     <Setting Name="ReportIncludeFingers" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">True</Value>
+    </Setting>
+    <Setting Name="DNS_Address" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="ConfigurationServer" Type="System.String" Scope="User">
+      <Value Profile="(Default)">https://reloadnet-reload.implementers.org/.well-known/reload-config</Value>
+    </Setting>
+    <Setting Name="OverlayName" Type="System.String" Scope="User">
+      <Value Profile="(Default)">implementers.org</Value>
     </Setting>
   </Settings>
 </SettingsFile>

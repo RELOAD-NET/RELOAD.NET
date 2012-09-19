@@ -1,5 +1,5 @@
 ﻿/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-* Copyright (C) 2012 Thomas Kluge <t.kluge@gmx.de> 
+* Copyright (C) 2012, Telekom Deutschland GmbH 
 *
 * This file is part of RELOAD.NET.
 *
@@ -18,7 +18,6 @@
 *
 * see https://github.com/RELOAD-NET/RELOAD.NET
 * 
-* Last edited by: Alex <alexander.knauf@gmail.com>
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 using System;
@@ -402,7 +401,14 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
         /// <param name="Buffer">The buffer.</param>
         private void SBB_OnData(object Sender, byte[] Buffer)
         {
-            try
+/*            ++ReloadGlobals.DbgPacketCount;
+            File.WriteAllBytes(@"C:\Temp\RELOAD\data0001.dmpa" + ReloadGlobals.DbgPacketCount.ToString("0000") + ".dmp", Buffer);
+            
+            //TKTEST
+            if (Buffer.Length > 500)
+              Buffer = File.ReadAllBytes(@"C:\Temp\RELOAD\data0001.dmp");
+   */
+          try
             {
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_SOCKET, String.Format("TLS_{0}: Data received, len {1}", Sender is ReloadTLSServer ? "S" : "C", Buffer.Length));
                 IAssociation association = (IAssociation)Sender;
@@ -425,18 +431,28 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
 
                             if (AnalysedBuffer != null)
                             {
-                                //bytesProcessed = 0;
-                                long temp = bytesProcessed;
-                                reloadMsg = new ReloadMessage(m_ReloadConfig).FromBytes(AnalysedBuffer, ref temp, ReloadMessage.ReadFlags.full);
-                                if (reloadMsg == null) {
+                                long thisMsgBytes = 0;
+                                reloadMsg = new ReloadMessage(m_ReloadConfig).FromBytes(AnalysedBuffer, ref thisMsgBytes, ReloadMessage.ReadFlags.full);
+                                if (reloadMsg != null)
+                                {
+                                  bytesProcessed += thisMsgBytes;
+                                  reloadMsg.LastHopNodeId = connectionTableEntry.NodeID;
 
+                                  ReloadFLMEventHandler(this,
+                                      new ReloadFLMEventArgs(ReloadFLMEventArgs.ReloadFLMEventTypes.RELOAD_EVENT_RECEIVE_OK, connectionTableEntry, reloadMsg));
                                 }
-                                 //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, String.Format("MessageLength={0}", temp));
-                                bytesProcessed += temp;
-                                reloadMsg.LastHopNodeId = connectionTableEntry.NodeID;
-
-                                ReloadFLMEventHandler(this,
-                                    new ReloadFLMEventArgs(ReloadFLMEventArgs.ReloadFLMEventTypes.RELOAD_EVENT_RECEIVE_OK, connectionTableEntry, reloadMsg));
+                                // message was invalid but a least the size could be extracted, try to skip to next packet
+                                else if (thisMsgBytes != 0)
+                                {
+                                  bytesProcessed += thisMsgBytes;
+                                  association.InputBufferOffset -= (int)thisMsgBytes; /* Help rx to terminate */
+                                }
+                                else
+                                {
+                                  m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_{0}: invalid message ignored!", Sender is ReloadTLSServer ? "S" : "C"));
+                                  association.InputBufferOffset = 0;  /* Help rx to terminate */
+                                  return;
+                                }
                             }
                             else
                             {

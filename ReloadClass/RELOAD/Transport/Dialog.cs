@@ -1,5 +1,5 @@
 ﻿/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-* Copyright (C) 2012 Thomas Kluge <t.kluge@gmx.de> 
+* Copyright (C) 2012, Telekom Deutschland GmbH 
 *
 * This file is part of RELOAD.NET.
 *
@@ -18,7 +18,6 @@
 *
 * see https://github.com/RELOAD-NET/RELOAD.NET
 * 
-* Last edited by: Alex <alexander.knauf@gmail.com>
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 using System;
@@ -56,12 +55,6 @@ namespace TSystems.RELOAD.Transport {
         private Port<bool> m_fDone;
         public Port<bool> Done {
             get { return m_fDone; }
-        }
-
-        private ReloadMessageFilter m_MessageFilter;
-        public ReloadMessageFilter MessageFilter
-        {
-            get { return m_MessageFilter; }
         }
 
         private Port<bool> m_portWaitForRx = new Port<bool>();

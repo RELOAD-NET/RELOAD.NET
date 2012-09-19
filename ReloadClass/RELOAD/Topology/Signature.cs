@@ -1,5 +1,5 @@
 ﻿/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-* Copyright (C) 2012 Thomas Kluge <t.kluge@gmx.de> 
+* Copyright (C) 2012, Telekom Deutschland GmbH 
 *
 * This file is part of RELOAD.NET.
 *
@@ -18,7 +18,6 @@
 *
 * see https://github.com/RELOAD-NET/RELOAD.NET
 * 
-* Last edited by: Alex <alexander.knauf@gmail.com>
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 using System;
@@ -96,10 +95,10 @@ namespace TSystems.RELOAD.Topology {
   /// http://www.iana.org/assignments/tls-parameters/tls-parameters.xml
   /// </summary>
   public enum SignerIdentityType {
-    reservedSignerIdentity  = (byte)0,
-    cert_hash               = (byte)1,
-    cert_hash_node_id       = (byte) 2,
-    none                    = (byte)3
+    reservedSignerIdentity  = 0,
+    cert_hash               = 1,
+    cert_hash_node_id       = 2,
+    none                    = 3
   }
 
   /// <summary>
@@ -107,8 +106,8 @@ namespace TSystems.RELOAD.Topology {
   /// use of X.509 certificates is defined in this draft.
   /// </summary>
   public enum CertificateType {
-    X509    = (byte)0,
-    OpenPGP = (byte)1
+    X509    = 0,
+    OpenPGP = 1
   }
 
   /// <summary>
@@ -313,10 +312,8 @@ namespace TSystems.RELOAD.Topology {
         writer.Write(IPAddress.HostToNetworkOrder((short)0));
         /* Write identity value */
         writer.Write((byte)identity.Identity.HashAlg);
-        byte hashLen = (Byte)identity.Identity.CertificateHash.Length;
-        writer.Write(hashLen);
-        byte[] hash = ascii.GetBytes(identity.Identity.CertificateHash);
-        writer.Write(hash);
+        writer.Write((byte)identity.Identity.CertificateHash.Length);
+        writer.Write(identity.Identity.CertificateHash);
         StreamUtil.WrittenBytesShortExcludeLength(posBeforeIdentity, writer);
         /* Write signature value */
         ReloadGlobals.WriteOpaqueValue(writer, signatureValue, 0xFFFF);
@@ -335,9 +332,9 @@ namespace TSystems.RELOAD.Topology {
         hashAlg = (HashAlgorithm)reader.ReadByte();
         length -= 1;
         ushort hashLen = (ushort)reader.ReadByte();
-        String hash = ascii.GetString(reader.ReadBytes(hashLen));
+        byte[] bHash = reader.ReadBytes(hashLen);
         /* Create SignerIdentityValue */
-        var signerIdVal = new SignerIdentityValue(type, hashAlg, hash);
+        var signerIdVal = new SignerIdentityValue(type, hashAlg, bHash);
         /* Create SignerIdentity */
         identity = new SignerIdentity(type, signerIdVal);
         /* Read SignatureValue */
@@ -409,11 +406,11 @@ namespace TSystems.RELOAD.Topology {
       get { return hashAlg; }
     }
 
-    private string certificateHash;
+    private byte[] certificateHash;
     /// <summary>
     /// The hash over the certificate.
     /// </summary>
-    public String CertificateHash {
+    public byte[] CertificateHash {
       get { return certificateHash; }
     }
 
@@ -423,12 +420,11 @@ namespace TSystems.RELOAD.Topology {
     /// </summary>
     /// <param name="type">The Singner type: cert_hash</param>
     /// <param name="args">The arguments for this type, e.g., cert hash: args[0] = hash_alg, args[1]= certificate_hash</param>
-    public SignerIdentityValue(SignerIdentityType type, HashAlgorithm alg,
-      string hash) {
+    public SignerIdentityValue(SignerIdentityType type, HashAlgorithm alg, byte[] hash) {
       switch (type) {
         case SignerIdentityType.cert_hash:          
             hashAlg = alg;
-            certificateHash = hash;          
+            certificateHash = (byte[])hash.Clone();          
           break;
         case SignerIdentityType.cert_hash_node_id:
           throw new NotSupportedException(
@@ -456,6 +452,11 @@ namespace TSystems.RELOAD.Topology {
   /// </summary>
   public class GenericCertificate {
 
+    ~GenericCertificate()
+    {
+        certificate = null;
+    }
+
     private CertificateType type;
     /// <summary>
     /// Returns the type of PKC, hence X.509
@@ -464,19 +465,21 @@ namespace TSystems.RELOAD.Topology {
       get { return type; }
     }
 
-    private String certificate;
+    private byte[] certificate = null;
     /// <summary>
     /// Returns the PKC in an opaque string representation.
     /// </summary>
-    public String Certificate {
+    public byte[] Certificate
+    {
       get { return certificate; }      
     }
 
-    public GenericCertificate(String pkc) {
+    public GenericCertificate(byte[] pkc)
+    {
       if (pkc == null)
         throw new ArgumentNullException("GenericCert: pkc null!");
       type = CertificateType.X509; // the default in RELOAD
-      certificate = pkc;
+      certificate = (byte[])pkc.Clone();
     }     
   }
 
