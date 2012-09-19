@@ -1,5 +1,5 @@
 ﻿/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-* Copyright (C) 2012 Thomas Kluge <t.kluge@gmx.de> 
+* Copyright (C) 2012, Telekom Deutschland GmbH 
 *
 * This file is part of RELOAD.NET.
 *
@@ -18,13 +18,11 @@
 *
 * see https://github.com/RELOAD-NET/RELOAD.NET
 * 
-* Last edited by: Alex <alexander.knauf@gmail.com>
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 using System;
 using System.Collections;
 using System.Collections.Generic;
-//using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Runtime.InteropServices;
@@ -67,7 +65,6 @@ namespace TSystems.RELOAD {
     }
 
     public volatile NodeId LocalNodeID = null;
-    public volatile String OverlayName = "";
     public volatile bool DontCheckSSLCert = false;   //enrollment server ssl cert
     public volatile Node LocalNode = null;
     public volatile Node AdmittingPeer = null;
@@ -259,7 +256,9 @@ namespace TSystems.RELOAD {
     public static UInt32 SIP_REGISTRATION_KIND_ID = 1234;
     public static UInt32 DISCO_REGISTRATION_KIND_ID = 4321;
     public static UInt32 ACCESS_LIST_KIND_ID = 3210;
-	public static UInt32 REDIR_KIND_ID = 104;
+    public static UInt32 REDIR_KIND_ID = 104;
+    public static UInt32 CERTIFICATE_BY_NODE_KIND_ID = 3;
+    public static UInt32 CERTIFICATE_BY_USER_KIND_ID = 16; 
 	
     public static bool SelfSignPermitted = false;
     public static readonly DateTime StartOfEpoch = new DateTime(1970, 1, 1);    
@@ -277,23 +276,17 @@ namespace TSystems.RELOAD {
     public static DataModel ACCESS_LIST_DATA_MODEL = DataModel.ARRAY;
     public static UInt32 ACCESS_LIST_LIFETIME = 86400;
     public static DataModel CERTIFICATE_BY_NODE_DATA_MODEL = DataModel.ARRAY;
+    public static DataModel CERTIFICATE_BY_USER_DATA_MODEL = DataModel.ARRAY;
     public static bool ReportEnabled = false;
     public static bool IsVirtualServer = false;
     public static bool ReportIncludeConnections = false;
     public static bool ReportIncludeFingers = false;
     public static bool ReportIncludeStatistic = false;
     public static bool ReportIncludeTopology = true;
-    public static bool AutoExe = false;  
-    public static string ReportURL = "";    
-    public static string DNS_Address = "141.22.26.233";
-    public static string EnrollmentServer = "";
-    /* Set this value to false, to set a fixed IP for enrollment server 
-     */
-    public static bool UseDNS = false;
-    /* set FixedDNS to true if the DNS ist configured manually, in that case a Webrequest
-     * to a URL resolved by DNS must be translated to IP-Address before!
-     */
-    public static bool FixedDNS = false;
+    public static bool AutoExe = false;
+    public static string ReportURL;  
+    public static string DNS_Address;
+    public static string ConfigurationServer;
     public static string RegKeyIPC = "Software\\T-Systems\\RELOAD";
     public static bool ForceLocalConfig = false;
     public static bool DocumentAutoScroll = true;
@@ -304,8 +297,8 @@ namespace TSystems.RELOAD {
     public static int DICTIONARY_KEY_LENGTH = 16;
     public static NodeId WildcardNodeId = new NodeId(HexStringConverter.ToByteArray("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"));
 
-    public static string SBB_LICENSE_SBB8_KEY = "Insert here your licence key";
-    public static string SBB_LICENSE_PKI8_KEY = "Insert here your licence key";
+    public static string SBB_LICENSE_SBB8_KEY = "put your (eval) license here";
+    //public static string SBB_LICENSE_PKI8_KEY = "put your (eval) license here";
 
     public static int WEB_REQUEST_TIMEOUT = 30000;
     public static int MAX_TLS_SEND_QUEUE_SIZE = 4;
@@ -341,16 +334,17 @@ namespace TSystems.RELOAD {
        document describes version 0.1, with a value of 0x01. */
     public static Byte RELOAD_VERSION = 0x01;
 
-    public static String OverlayName = "t-reload.realmv6.org";
-    // public static String OverlayName = "mp2psip.org";
+    public static String OverlayName = "implementers.org";//"mp2psip.org, t-reload.realmv6.org";
     /* The 32 bit checksum/hash of the overlay being used */
-    public static UInt32 OverlayHash = 0x00000001;
+    public static UInt32 OverlayHash = GetHash(OverlayName);
 
     /*enable fragmentation of outgoing packages (only implemented for TLS)*/
     public static bool FRAGMENTATION = false;
     /* hardcoded fragment_size, not compliant with draft (only implemented for TLS)*/
     public static uint FRAGMENT_SIZE = 1000;
 
+    /* hardcoded fragment_size, not compliant with draft (only implemented for TLS)*/
+    public static uint DbgPacketCount = 0;
     #region Trace
 
 
@@ -523,6 +517,37 @@ namespace TSystems.RELOAD {
       byte[] bytes = sha1.ComputeHash(data);
       return new NodeId(bytes);
     }
+
+    /// <summary>
+    /// SHA-1 hash
+    /// </summary>
+    /// <param name="data">The data.</param>
+    /// <returns></returns>
+    public static UInt32 GetHash(String str2hash)
+    {
+        SHA1CryptoServiceProvider sha1 = new SHA1CryptoServiceProvider();
+        byte[] bytes = sha1.ComputeHash(Encoding.Default.GetBytes(str2hash));
+
+        if (BitConverter.IsLittleEndian)
+            bytes = ReverseBytes(bytes);
+
+        return BitConverter.ToUInt32(bytes, 0);
+    }
+
+    private static byte[] ReverseBytes(byte[] inArray)
+    {
+        byte temp;
+        int highCtr = inArray.Length - 1;
+
+        for (int ctr = 0; ctr < inArray.Length / 2; ctr++)
+        {
+            temp = inArray[ctr];
+            inArray[ctr] = inArray[highCtr];
+            inArray[highCtr] = temp;
+            highCtr -= 1;
+        }
+        return inArray;
+    }
 #if false 
         /// <summary>
         /// SHA-256 hash
@@ -608,6 +633,22 @@ namespace TSystems.RELOAD {
       return Address;
     }
 
+
+    /// <summary>
+    /// Conversion of data model identifier string to enum value
+    /// </summary>
+    public static DataModel DataModelFromString(String model) {
+      if (model.ToLower() == "single")
+        return ReloadGlobals.DataModel.SINGLE_VALUE;
+      else if (model.ToLower() == "array")
+        return ReloadGlobals.DataModel.ARRAY;
+      else if (model.ToLower() == "dictionary")
+        return ReloadGlobals.DataModel.DICTIONARY;
+
+      return ReloadGlobals.DataModel.INVALID;
+    }
+   
+    
     /// <summary>
     /// Table lookup for pow 2 (finger calculations)
     /// </summary>
@@ -936,6 +977,7 @@ namespace TSystems.RELOAD {
       }
     }
   }
+
 
 #if COMPACT_FRAMEWORK
    class File
