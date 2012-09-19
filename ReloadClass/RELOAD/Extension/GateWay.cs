@@ -1,5 +1,5 @@
 ﻿/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-* Copyright (C) 2012 Thomas Kluge <t.kluge@gmx.de> 
+* Copyright (C) 2012, Telekom Deutschland GmbH 
 *
 * This file is part of RELOAD.NET.
 *
@@ -18,7 +18,6 @@
 *
 * see https://github.com/RELOAD-NET/RELOAD.NET
 * 
-* Last edited by: Alex <alexander.knauf@gmail.com>
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 using System;
@@ -40,9 +39,7 @@ namespace TSystems.RELOAD.Extension {
 
     private GatewayRequestHandler gwRequestHandler;
 
-    private System.Timers.Timer joinedTimer;
-
-    //private Dictionary<string, ReloadMessage> forwardBuffer = new Dictionary<string,ReloadMessage>();
+   //private Dictionary<string, ReloadMessage> forwardBuffer = new Dictionary<string,ReloadMessage>();
     //Buffer for Messages which needs to be forwarded but the responsible GateWay is unknown
     private Dictionary<string, Queue<ReloadMessage>> forwardBuffer = new Dictionary<string, Queue<ReloadMessage>>();
 
@@ -59,10 +56,10 @@ namespace TSystems.RELOAD.Extension {
     void machineIntraDomain_StateUpdate(ReloadConfig.RELOAD_State state) {
 
       if (state == ReloadConfig.RELOAD_State.Configured && mainPeer.ReloadConfig.IsBootstrap == true)
-        redirintraDomainNode.registerService(mainPeer.ReloadConfig.OverlayName);
+        redirintraDomainNode.registerService(ReloadGlobals.OverlayName);
 
       if (state == ReloadConfig.RELOAD_State.Joined)
-        redirintraDomainNode.registerService(mainPeer.ReloadConfig.OverlayName);
+        redirintraDomainNode.registerService(ReloadGlobals.OverlayName);
 
     }
 
