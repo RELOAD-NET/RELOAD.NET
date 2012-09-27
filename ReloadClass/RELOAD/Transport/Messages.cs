@@ -1,5 +1,5 @@
 ﻿/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-* Copyright (C) 2012 Thomas Kluge <t.kluge@gmx.de> 
+* Copyright (C) 2012, Telekom Deutschland GmbH 
 *
 * This file is part of RELOAD.NET.
 *
@@ -17,8 +17,7 @@
 * along with RELOAD.NET.  If not, see <http://www.gnu.org/licenses/>.
 *
 * see https://github.com/RELOAD-NET/RELOAD.NET
-* 
-* Last edited by: Alex <alexander.knauf@gmail.com>
+*
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 using System;
@@ -314,11 +313,11 @@ namespace TSystems.RELOAD.Transport {
         var sha256 = new SHA256Managed();
 
         foreach (GenericCertificate cert in certificates) {
-          byte[] hash = sha256.ComputeHash(Encoding.ASCII.GetBytes(cert.Certificate));
-          var strHash = ascii.GetString(hash, 0, hash.Length);
+          byte[] hash = sha256.ComputeHash(cert.Certificate);
           var certHash = signature.Identity.Identity.CertificateHash;
-          if (strHash == certHash) {
-            signerCert.LoadFromBufferPEM(ascii.GetBytes(cert.Certificate), "");
+          if (certHash.SequenceEqual(certHash))
+          {
+            signerCert.LoadFromBuffer(cert.Certificate);
             break;
           }
         }
@@ -376,7 +375,7 @@ namespace TSystems.RELOAD.Transport {
     /// </summary>
     /// <param name="signerCert">X.509 PKC of the request originator</param>
     /// <param name="certs">X.509 PKCs for validation data</param>
-    public SecurityBlock(ReloadConfig rc, SignerIdentity myIdentity, List<String> certs) {
+    public SecurityBlock(ReloadConfig rc, SignerIdentity myIdentity, List<byte[]> certs) {
       m_ReloadConfig = rc;
       m_AccessControl = rc.AccessController;
       /* Add the certificate of signer */
@@ -384,7 +383,7 @@ namespace TSystems.RELOAD.Transport {
       GenericCertificate myCert = m_AccessControl.GetPKC(myIdentity);
       certificates.Add(myCert);
       /* Add all other PKCs */
-      foreach (String pkc in certs) {
+      foreach (byte[] pkc in certs) {
         certificates.Add(new GenericCertificate(pkc));
       }
       signerId = myIdentity;
@@ -422,11 +421,15 @@ namespace TSystems.RELOAD.Transport {
       writer.Write(IPAddress.HostToNetworkOrder((short)0));
       foreach (GenericCertificate pkc in certificates) {
         writer.Write((byte)pkc.Type);
+<<<<<<< HEAD
         byte[] bcert = ascii.GetBytes(pkc.Certificate);
         TElX509Certificate cert = new TElX509Certificate();
         cert.LoadFromBufferPEM(bcert, "");
         cert.SaveToBuffer(out bcert);
         ReloadGlobals.WriteOpaqueValue(writer, bcert, 0xFFFF);
+=======
+        ReloadGlobals.WriteOpaqueValue(writer, pkc.Certificate, 0xFFFF);
+>>>>>>> c72920f5592677c84932e6ebf9afc0acefa648a4
       }
       StreamUtil.WrittenBytesShortExcludeLength(posBeforeCerts, writer);
       signature.Dump(writer);
@@ -450,11 +453,9 @@ namespace TSystems.RELOAD.Transport {
         UInt16 len = (UInt16)IPAddress.NetworkToHostOrder(reader.ReadInt16());
         //string pkc = defEncode.GetString(reader.ReadBytes(len), 0, len);
         TElX509Certificate cert = new TElX509Certificate();
-        cert.LoadFromBuffer(reader.ReadBytes(len));
-        Byte[] bcert;
-        cert.SaveToBufferPEM(out bcert, "");
-        String pkc = ascii.GetString(bcert);
-        certificates.Add(new GenericCertificate(pkc));
+        Byte[] bcert = reader.ReadBytes(len);
+        cert.LoadFromBuffer(bcert);
+        certificates.Add(new GenericCertificate(bcert));
       }
       signature = new Signature(m_ReloadConfig).FromReader(reader, reloadMsgSize);
       return this;
@@ -1116,19 +1117,20 @@ namespace TSystems.RELOAD.Transport {
           }
           forwarding_header.overlay = (UInt32)IPAddress.NetworkToHostOrder(
             reader.ReadInt32());
+
+          if (forwarding_header.overlay != ReloadGlobals.OverlayHash)
+              throw new System.Exception("Message from wrong overlay! (probably invalid hash)");
+
           /* configuration_sequence */
-          forwarding_header.configuration_sequence = (UInt16)IPAddress.
-            NetworkToHostOrder(reader.ReadInt16());
+          forwarding_header.configuration_sequence = (UInt16)IPAddress.NetworkToHostOrder(reader.ReadInt16());
           /* version */
           forwarding_header.version = reader.ReadByte();
           /* ttl */
           forwarding_header.ttl = reader.ReadByte();
           /* fragment */
-          forwarding_header.fragment = (UInt32)IPAddress.NetworkToHostOrder(
-            reader.ReadInt32());
+          forwarding_header.fragment = (UInt32)IPAddress.NetworkToHostOrder(reader.ReadInt32());
           /* length */
-          forwarding_header.length = (UInt32)IPAddress.NetworkToHostOrder(
-            reader.ReadInt32());
+          forwarding_header.length = (UInt32)IPAddress.NetworkToHostOrder(reader.ReadInt32());
 
           if (forwarding_header.length >= ReloadGlobals.MAX_PACKET_BUFFER_SIZE) {
             m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
@@ -1138,32 +1140,24 @@ namespace TSystems.RELOAD.Transport {
           }
 
           /* transaction_id */
-          forwarding_header.transaction_id = (UInt64)IPAddress.NetworkToHostOrder(
-            reader.ReadInt64());
+          forwarding_header.transaction_id = (UInt64)IPAddress.NetworkToHostOrder(reader.ReadInt64());
           /* max_response_length */
-          forwarding_header.max_response_length = (UInt32)IPAddress.NetworkToHostOrder(
-            reader.ReadInt32());
+          forwarding_header.max_response_length = (UInt32)IPAddress.NetworkToHostOrder(reader.ReadInt32());
           /* via list length */
-          forwarding_header.via_list_length = (UInt16)IPAddress.NetworkToHostOrder(
-            reader.ReadInt16());
+          forwarding_header.via_list_length = (UInt16)IPAddress.NetworkToHostOrder(reader.ReadInt16());
           /* destination list length */
-          forwarding_header.destination_list_length = (UInt16)IPAddress.
-            NetworkToHostOrder(reader.ReadInt16());
+          forwarding_header.destination_list_length = (UInt16)IPAddress.NetworkToHostOrder(reader.ReadInt16());
           /* options length */
-          forwarding_header.options_length = (UInt16)IPAddress.NetworkToHostOrder(
-            reader.ReadInt16());
+          forwarding_header.options_length = (UInt16)IPAddress.NetworkToHostOrder(reader.ReadInt16());
 
           if (forwarding_header.via_list_length != 0)
-            forwarding_header.via_list = ReadDestList(reader,
-              forwarding_header.via_list_length);
+            forwarding_header.via_list = ReadDestList(reader, forwarding_header.via_list_length);
 
           if (forwarding_header.destination_list_length != 0)
-            forwarding_header.destination_list = ReadDestList(reader,
-              forwarding_header.destination_list_length);
+            forwarding_header.destination_list = ReadDestList(reader, forwarding_header.destination_list_length);
 
           if (forwarding_header.options_length != 0)
-            forwarding_header.fw_options = ReadOptionList(reader,
-        forwarding_header.options_length);
+            forwarding_header.fw_options = ReadOptionList(reader, forwarding_header.options_length);
 
           long reload_msg_begin = ms.Position;
 
@@ -1183,12 +1177,9 @@ namespace TSystems.RELOAD.Transport {
           }
 
           // now turn to message body
-          RELOAD_MessageCode MsgCode = (RELOAD_MessageCode)(UInt16)IPAddress.
-            NetworkToHostOrder(
-            reader.ReadInt16());
+          RELOAD_MessageCode MsgCode = (RELOAD_MessageCode)(UInt16)IPAddress.NetworkToHostOrder(reader.ReadInt16());
           // now read message length          
-          long reload_msg_size = (UInt32)IPAddress.NetworkToHostOrder(
-            reader.ReadInt32());
+          long reload_msg_size = (UInt32)IPAddress.NetworkToHostOrder(reader.ReadInt32());
 
           /* set pointer before msg code that the message routines itself
            * can read it again
@@ -1200,26 +1191,20 @@ namespace TSystems.RELOAD.Transport {
               break;
             case RELOAD_MessageCode.Attach_Request:
             case RELOAD_MessageCode.Attach_Answer:
-              reload_message_body = new AttachReqAns().FromReader(
-                this, reader, reload_msg_size);
+              reload_message_body = new AttachReqAns().FromReader(this, reader, reload_msg_size);
               break;
             case RELOAD_MessageCode.Store_Request:
               reload_message_body = new StoreReq(
-                m_ReloadConfig.ThisMachine.UsageManager).FromReader(
-                this, reader, reload_msg_size);
+                m_ReloadConfig.ThisMachine.UsageManager).FromReader(this, reader, reload_msg_size);
               break;
             case RELOAD_MessageCode.Store_Answer:
-              reload_message_body = new StoreAns().FromReader(
-                this, reader, reload_msg_size);
+              reload_message_body = new StoreAns().FromReader(this, reader, reload_msg_size);
               break;
             case RELOAD_MessageCode.Fetch_Request:
-              reload_message_body = new FetchReq(m_ReloadConfig.ThisMachine.UsageManager).
-                FromReader(this, reader, reload_msg_size);
+              reload_message_body = new FetchReq(m_ReloadConfig.ThisMachine.UsageManager).FromReader(this, reader, reload_msg_size);
               break;
-
             case RELOAD_MessageCode.Fetch_Answer:
-              reload_message_body = new FetchAns(m_ReloadConfig.ThisMachine.UsageManager).
-                FromReader(this, reader, reload_msg_size);
+              reload_message_body = new FetchAns(m_ReloadConfig.ThisMachine.UsageManager).FromReader(this, reader, reload_msg_size);
               break;
             case RELOAD_MessageCode.Remove_Request:
             case RELOAD_MessageCode.Remove_Answer:
@@ -1230,38 +1215,32 @@ namespace TSystems.RELOAD.Transport {
               break;
             case RELOAD_MessageCode.Join_Request:
             case RELOAD_MessageCode.Join_Answer:
-              reload_message_body = new JoinReqAns().FromReader(
-                this, reader, reload_msg_size);
+              reload_message_body = new JoinReqAns().FromReader(this, reader, reload_msg_size);
               break;
             case RELOAD_MessageCode.Leave_Request:
             case RELOAD_MessageCode.Leave_Answer:
-              reload_message_body = new LeaveReqAns().FromReader(
-                this, reader, reload_msg_size);
+              reload_message_body = new LeaveReqAns().FromReader(this, reader, reload_msg_size);
               break;
             case RELOAD_MessageCode.Update_Request:
             case RELOAD_MessageCode.Update_Answer:
-              reload_message_body = new UpdateReqAns().FromReader(
-                this, reader, reload_msg_size);
+              reload_message_body = new UpdateReqAns().FromReader(this, reader, reload_msg_size);
               break;
             case RELOAD_MessageCode.Route_Query_Request:
             case RELOAD_MessageCode.Route_Query_Answer:
               break;
             case RELOAD_MessageCode.Ping_Request:
             case RELOAD_MessageCode.Ping_Answer:
-              reload_message_body = new PingReqAns().FromReader(
-                this, reader, reload_msg_size);
+              reload_message_body = new PingReqAns().FromReader(this, reader, reload_msg_size);
               break;
             case RELOAD_MessageCode.Stat_Request:
             case RELOAD_MessageCode.Stat_Answer:
               break;
             case RELOAD_MessageCode.App_Attach_Request:
             case RELOAD_MessageCode.App_Attach_Answer:
-              reload_message_body = new AppAttachReqAns().FromReader(
-                this, reader, reload_msg_size);
+              reload_message_body = new AppAttachReqAns().FromReader(this, reader, reload_msg_size);
               break;
             case RELOAD_MessageCode.Error:
-              reload_message_body = new ErrorResponse().FromReader(
-                this, reader, reload_msg_size);
+              reload_message_body = new ErrorResponse().FromReader(this, reader, reload_msg_size);
               break;
             case RELOAD_MessageCode.Unused:
             case RELOAD_MessageCode.Unused2:
@@ -1280,8 +1259,7 @@ namespace TSystems.RELOAD.Transport {
           }
           if (ReloadGlobals.TLS) {
             /* Obtain security block */
-            security_block = new SecurityBlock(m_ReloadConfig).FromReader(
-              reader, reload_msg_size);
+            security_block = new SecurityBlock(m_ReloadConfig).FromReader(reader, reload_msg_size);
           }
           else { // do the FAKE
             int iNodeIDLen = reader.ReadByte();
@@ -1370,9 +1348,10 @@ namespace TSystems.RELOAD.Transport {
     // if resourceName contains an @ and the string behind the @ is different from the current OverlayName the ForwardingOptionsType.destinationOverlay is set
     public bool AddDestinationOverlay(string resourceName) {
       String destinationOverlay = null;
-      if (m_ReloadConfig.OverlayName == null)
+      if (ReloadGlobals.OverlayName == null)
         return false;
-      else if (!resourceName.Contains(m_ReloadConfig.OverlayName) && resourceName.Contains("@")) {
+      else if (!resourceName.Contains(ReloadGlobals.OverlayName) && resourceName.Contains("@"))
+      {
         destinationOverlay = resourceName.Substring(resourceName.IndexOf("@") + 1);
       }
       else if (resourceName != null) {
@@ -1401,7 +1380,7 @@ namespace TSystems.RELOAD.Transport {
 
       option = new ForwardingOption();
       option.fwo_type = ForwardingOptionsType.sourceOverlay;
-      bytes = System.Text.Encoding.Unicode.GetBytes(m_ReloadConfig.OverlayName); // TODO: Unicode for sure?
+      bytes = System.Text.Encoding.Unicode.GetBytes(ReloadGlobals.OverlayName); // TODO: Unicode for sure?
       option.bytes = bytes;
       option.length = (UInt16)bytes.Length;
       //forwarding_header.fw_options.Add(option);
@@ -1849,16 +1828,15 @@ namespace TSystems.RELOAD.Transport {
     /// <param name="reader"></param>
     /// <param name="reload_msg_size"></param>
     /// <returns></returns>
-    public override RELOAD_MessageBody FromReader(ReloadMessage rm,
-      BinaryReader reader, long reload_msg_size) {
+    public override RELOAD_MessageBody FromReader(ReloadMessage rm, BinaryReader reader, long reload_msg_size) {
+      
+      UInt32 message_len = 0;
       /* try to read the packet as a StoreReq packet */
-      try {
+      try
+      {
         long posBeforeMsg = reader.BaseStream.Position;
-        RELOAD_MsgCode = (RELOAD_MessageCode)(UInt16)IPAddress.NetworkToHostOrder(
-          reader.ReadInt16());
-        UInt32 message_len = (UInt32)(IPAddress.HostToNetworkOrder(
-          (int)reader.ReadInt32()));
-
+        RELOAD_MsgCode = (RELOAD_MessageCode)(UInt16)IPAddress.NetworkToHostOrder(reader.ReadInt16());
+        message_len = (UInt32)(IPAddress.HostToNetworkOrder((int)reader.ReadInt32()));
 
         Byte res_id_length = reader.ReadByte();
         if (res_id_length == 0)
@@ -1867,37 +1845,36 @@ namespace TSystems.RELOAD.Transport {
         replica_number = reader.ReadByte();
 
         long posBeforeRead = reader.BaseStream.Position;
-        UInt32 kindDataLen = (UInt32)(IPAddress.NetworkToHostOrder(
-          reader.ReadInt32()));
+        UInt32 kindDataLen = (UInt32)(IPAddress.NetworkToHostOrder(reader.ReadInt32()));
         /* StoreKindData Receive loop */
-        while (StreamUtil.ReadBytes(posBeforeRead, reader) < kindDataLen) {
-          UInt32 kindId = (UInt32)(IPAddress.HostToNetworkOrder(
-            reader.ReadInt32()));
-          UInt64 generation = (UInt64)(IPAddress.NetworkToHostOrder(
-            reader.ReadInt64()));
+        while (StreamUtil.ReadBytes(posBeforeRead, reader) < kindDataLen)
+        {
+
+          UInt32 kindId = (UInt32)(IPAddress.HostToNetworkOrder(reader.ReadInt32()));
+          UInt64 generation = (UInt64)(IPAddress.NetworkToHostOrder(reader.ReadInt64()));
 
           var store_kind_data = new StoreKindData(kindId, generation);
 
           long posBeforeSD = reader.BaseStream.Position;
-          UInt32 storedDataLen = (UInt32)(IPAddress.HostToNetworkOrder(
-            reader.ReadInt32()));
-          if (RELOAD_MsgCode == RELOAD_MessageCode.Store_Request) {
-            while (StreamUtil.ReadBytes(posBeforeSD, reader) < storedDataLen) {
-              /* reading properties of StoredData struct */
-              UInt32 stored_data_lenght = (UInt32)(IPAddress.NetworkToHostOrder(
-                reader.ReadInt32()));
-              UInt64 storage_time = (UInt64)(IPAddress.NetworkToHostOrder(
-                reader.ReadInt64()));
-              UInt32 lifetime = (UInt32)(IPAddress.NetworkToHostOrder(
-                reader.ReadInt32()));
+          UInt32 storedDataLen = (UInt32)(IPAddress.HostToNetworkOrder(reader.ReadInt32()));
 
-              ReloadGlobals.DataModel data_model = myManager.GetDataModelfromKindId(
-                store_kind_data.Kind);
+          if (RELOAD_MsgCode == RELOAD_MessageCode.Store_Request)
+          {
+            while (StreamUtil.ReadBytes(posBeforeSD, reader) < storedDataLen)
+            {
+              /* reading properties of StoredData struct */
+              UInt32 stored_data_lenght = (UInt32)(IPAddress.NetworkToHostOrder(reader.ReadInt32()));
+              UInt64 storage_time = (UInt64)(IPAddress.NetworkToHostOrder(reader.ReadInt64()));
+              UInt32 lifetime = (UInt32)(IPAddress.NetworkToHostOrder(reader.ReadInt32()));
+
+              ReloadGlobals.DataModel data_model = myManager.GetDataModelfromKindId(store_kind_data.Kind);
+
               Boolean exists;
               IUsage usage;
               StoredDataValue stored_data_value;
 
-              switch (data_model) {
+              switch (data_model)
+              {
                 case ReloadGlobals.DataModel.SINGLE_VALUE:
                   throw new NotImplementedException("There is no Usage with Single Value atm");
 
@@ -1908,9 +1885,9 @@ namespace TSystems.RELOAD.Transport {
 
                   stored_data_value = new StoredDataValue(index, usage, exists);
                   break;
+
                 case ReloadGlobals.DataModel.DICTIONARY:
-                  UInt16 keyLength = (UInt16)(IPAddress.NetworkToHostOrder(
-                    (short)reader.ReadInt16()));
+                  UInt16 keyLength = (UInt16)(IPAddress.NetworkToHostOrder((short)reader.ReadInt16()));
                   string key = BitConverter.ToString(reader.ReadBytes(keyLength), 0, keyLength);  //key is a hex string
                   key = key.Replace("-", "");
                   exists = (reader.ReadByte() == 0x00 ? false : true);
@@ -1918,6 +1895,7 @@ namespace TSystems.RELOAD.Transport {
 
                   stored_data_value = new StoredDataValue(key, usage, exists);
                   break;
+
                 default:
                   throw new NotSupportedException(String.Format("The data_model {0} is not supported", data_model));
               }
@@ -1932,8 +1910,9 @@ namespace TSystems.RELOAD.Transport {
         UInt32 totalRead = StreamUtil.ReadBytes(posBeforeMsg, reader);
         reload_msg_size = reload_msg_size - (totalRead + 1);
       }
-      catch (Exception ex) {
-        string debug = ex.Message;
+      catch (Exception ex)
+      {
+        throw ex;
       }
       return this;
     }
@@ -2013,13 +1992,12 @@ namespace TSystems.RELOAD.Transport {
             /* Read kind id */
             UInt32 kindId = (UInt32)(IPAddress.NetworkToHostOrder(reader.ReadInt32()));
             /* Read generation */
-            UInt64 generation_counter = (UInt64)(IPAddress.NetworkToHostOrder(
-              reader.ReadInt64()));
+            UInt64 generation_counter = (UInt64)(IPAddress.NetworkToHostOrder(reader.ReadInt64()));
             /* read length of replicas */
             long posBeforeReplicas = reader.BaseStream.Position;
-            UInt16 replicas_lenght = (UInt16)(IPAddress.NetworkToHostOrder(
-              reader.ReadInt16()));
+            UInt16 replicas_lenght = (UInt16)(IPAddress.NetworkToHostOrder(reader.ReadInt16()));
             List<NodeId> replicas = new List<NodeId>();
+
             /* Read replicas */
             while (StreamUtil.ReadBytes(posBeforeReplicas, reader) < replicas_lenght) {
               NodeId replica = new NodeId(reader.ReadBytes(ReloadGlobals.NODE_ID_DIGITS));
@@ -2037,9 +2015,8 @@ namespace TSystems.RELOAD.Transport {
         UInt32 totalRead = StreamUtil.ReadBytes(postBeforeMsg, reader);
         reload_msg_size = reload_msg_size - (totalRead + 1); // TODO check whether true
       }
-      catch {
-
-        throw new Exception();
+      catch(Exception ex) {
+        throw ex;
       }
       return this;
     }
@@ -2340,8 +2317,7 @@ namespace TSystems.RELOAD.Transport {
               UInt32 lifetime = (UInt32)(IPAddress.NetworkToHostOrder(
                 reader.ReadInt32()));
 
-              ReloadGlobals.DataModel data_model = myManager.
-                GetDataModelfromKindId(kind);
+              ReloadGlobals.DataModel data_model = myManager.GetDataModelfromKindId(kind);
 
               Boolean exists;
               IUsage usage;

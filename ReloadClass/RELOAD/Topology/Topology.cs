@@ -1,5 +1,5 @@
 ﻿/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-* Copyright (C) 2012 Thomas Kluge <t.kluge@gmx.de> 
+* Copyright (C) 2012, Telekom Deutschland GmbH 
 *
 * This file is part of RELOAD.NET.
 *
@@ -18,7 +18,7 @@
 *
 * see https://github.com/RELOAD-NET/RELOAD.NET
 * 
-* Last edited by: Alex <alexander.knauf@gmail.com>
+
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 using System;
@@ -973,9 +973,12 @@ namespace TSystems.RELOAD.Topology {
 
                 //don't send updates as client
                 if (m_ReloadConfig.State != ReloadConfig.RELOAD_State.Joined) {
+                  if (!m_ReloadConfig.IsBootstrap)
+                  {
                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO,
-                      "Not joined, don't send updates to all");
-                    return;
+                        "Not joined, don't send updates to all");
+                  }
+                  return;
                 }
                 else
                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO,
@@ -1213,7 +1216,8 @@ namespace TSystems.RELOAD.Topology {
                 Address = ReloadGlobals.IPAddressFromHost(m_ReloadConfig,
                   ReloadGlobals.HostName);
             }
-
+            //TKTEST IETF
+           // Address =  new IPAddress(new byte[] { 192, 168, 2, 147 });
             if (Address == null) {
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
                   "Couldn't figure out my IP Address");

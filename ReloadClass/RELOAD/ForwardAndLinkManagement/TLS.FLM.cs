@@ -1,5 +1,5 @@
 ﻿/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-* Copyright (C) 2012 Thomas Kluge <t.kluge@gmx.de> 
+* Copyright (C) 2012, Telekom Deutschland GmbH 
 *
 * This file is part of RELOAD.NET.
 *
@@ -18,7 +18,6 @@
 *
 * see https://github.com/RELOAD-NET/RELOAD.NET
 * 
-* Last edited by: Alex <alexander.knauf@gmail.com>
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 using System;
@@ -162,8 +161,8 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
             return result;
         }
 
-        public IEnumerator<ITask> Send(Node node, ReloadMessage reloadMessage) {
-          /* Try to find a matching connection using node id or target address*/
+        public IEnumerator<ITask> Send(Node node, ReloadMessage reloadMessage)
+        {
           ReloadConnectionTableEntry connectionTableEntry = null;
           List<Byte[]> ByteArrayList = new List<byte[]>();
           ByteArrayList.Add(reloadMessage.ToBytes());
@@ -175,7 +174,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
           }
 
           foreach (byte[] ByteArray in ByteArrayList) {
-
+            /* Try to find a matching connection using node id or target address*/
             if (node.Id != null) {
               connectionTableEntry = connectionTable.lookupEntry(node.Id);
               if (connectionTableEntry != null)
@@ -229,7 +228,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                         if (connectionTableEntry != null)
                           m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TRANSPORT, String.Format("FLM: Found open connection for target IP {0}:{1}", candidate.addr_port.ipaddr, candidate.addr_port.port));
                         else
-                          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TRANSPORT, String.Format("FOpening connection to {0}:{1}", candidate.addr_port.ipaddr, candidate.addr_port.port));
+                          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TRANSPORT, String.Format("Opening connection to {0}:{1}", candidate.addr_port.ipaddr, candidate.addr_port.port));
                         send_params = new ReloadSendParameters() {
 
                           connectionTableEntry = connectionTableEntry,

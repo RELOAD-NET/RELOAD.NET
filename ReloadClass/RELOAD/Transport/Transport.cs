@@ -1,5 +1,5 @@
 ﻿/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-* Copyright (C) 2012 Thomas Kluge <t.kluge@gmx.de> 
+* Copyright (C) 2012, Telekom Deutschland GmbH 
 *
 * This file is part of RELOAD.NET.
 *
@@ -18,7 +18,6 @@
 *
 * see https://github.com/RELOAD-NET/RELOAD.NET
 * 
-* Last edited by: Alex <alexander.knauf@gmail.com>
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 using System;
@@ -873,6 +872,7 @@ namespace TSystems.RELOAD.Transport {
             RELOAD_MessageCode.Attach_Request.ToString().PadRight(16, ' '),
             nextHopNode, dest.ToString(), reloadSendMsg.TransactionID));
 
+<<<<<<< HEAD
           Arbiter.Activate(m_DispatcherQueue,
             new IterativeTask<ReloadMessage, ReloadMessageFilter, int>(reloadSendMsg,
             new ReloadMessageFilter(reloadSendMsg.TransactionID), RetransmissionTime,
@@ -899,6 +899,35 @@ namespace TSystems.RELOAD.Transport {
               m_forwarding.LoopedTrans = new Port<ulong>();
             }
           }));
+=======
+            Arbiter.Activate(m_DispatcherQueue,
+              new IterativeTask<ReloadMessage, ReloadMessageFilter, int>(reloadSendMsg,
+              new ReloadMessageFilter(reloadSendMsg.TransactionID), RetransmissionTime,
+              reloadDialog.Execute));
+          }
+          catch (Exception e) {
+            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
+              String.Format("AttachFinger: " + e));
+          }
+          bool gotLoop = false;
+
+          if (reloadDialog == null)
+            yield break;      
+
+          yield return Arbiter.Choice(
+            /* Success, Attached to finger */
+            Arbiter.Receive(false, reloadDialog.Done, done => { }),
+            /* Loop detected */
+            Arbiter.Receive(false, m_forwarding.LoopedTrans, transId => {
+              if (transId == reloadSendMsg.TransactionID) {
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING,
+                  String.Format("Not re-sending transaction: {0:x16}=> a loopback detected!",
+                  reloadSendMsg.TransactionID));
+                gotLoop = true;
+                m_forwarding.LoopedTrans = new Port<ulong>();
+              }
+            }));
+>>>>>>> c72920f5592677c84932e6ebf9afc0acefa648a4
 
         if (gotLoop) {
           attachNext.Post(true);
@@ -1606,7 +1635,7 @@ namespace TSystems.RELOAD.Transport {
     }
 
     /// <summary>
-    /// Handover key if: 1. leave overlay 2. Im AP while a join req.
+    /// Handover key if: 1. leave overlay 2. I'm AP while a join req happens.
     /// </summary>
     /// <param name="fSendLeaveFirst"></param>
     /// <returns></returns>
@@ -2150,8 +2179,14 @@ namespace TSystems.RELOAD.Transport {
           Arbiter.Activate(m_DispatcherQueue,
             new IterativeTask<Destination, PingOption>(new Destination(Originator.Id),
             PingOption.direct, SendPing));
+<<<<<<< HEAD
       if (source_overlay == m_ReloadConfig.OverlayName) {
 
+=======
+      if (source_overlay == ReloadGlobals.OverlayName)
+      {
+      
+>>>>>>> c72920f5592677c84932e6ebf9afc0acefa648a4
         // Send ping to establish a physical connection
         Arbiter.Activate(m_DispatcherQueue,
           new IterativeTask<Destination, PingOption>(new Destination(Originator.Id),
@@ -2473,6 +2508,96 @@ namespace TSystems.RELOAD.Transport {
 
         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("!!! receive_message: !!! {0} from {1}", Enum.GetName(typeof(RELOAD_MessageCode), reloadMsg.reload_message_body.RELOAD_MsgCode), reloadMsg.OriginatorID));
 
+<<<<<<< HEAD
+=======
+        if (reloadMsg.forwarding_header.fw_options != null) { //handle proprietary forwarding options destination_overlay and source_overlay --joscha
+          string destination_overlay = null;
+          string source_overlay = null;
+          //---------------DEBUG
+          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format(" reloadMsg.forwarding_header.fw_options != null via_list"));
+          if (reloadMsg.forwarding_header.via_list != null) {
+            foreach (Destination destx in reloadMsg.forwarding_header.via_list)
+              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Via={0} ", destx.ToString()));
+          }
+          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format(" reloadMsg.forwarding_header.fw_options != null destination_list"));
+          if (reloadMsg.forwarding_header.destination_list != null) {
+            foreach (Destination desty in reloadMsg.forwarding_header.destination_list)
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Dest={0} ", desty.ToString()));
+          }
+          //---------------DEBUG
+          foreach (ForwardingOption option in reloadMsg.forwarding_header.fw_options) {
+            if (option.fwo_type == ForwardingOptionsType.destinationOverlay) {
+              destination_overlay = System.Text.Encoding.Unicode.GetString(option.bytes);
+            }
+            if (option.fwo_type == ForwardingOptionsType.sourceOverlay) {
+              source_overlay = System.Text.Encoding.Unicode.GetString(option.bytes);
+            }
+          }
+          if (source_overlay != null && destination_overlay != null) {
+            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format(ReloadGlobals.OverlayName + ": " + "Message from sourceOverlay: " + source_overlay + " for destinationOverlay: " + destination_overlay));
+
+            if (m_machine is GWMachine) {
+              GWMachine gw = (GWMachine)m_machine;
+              //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("Message has reached the GatewayPeer " + m_machine.ReloadConfig.OverlayName));
+              if (ReloadGlobals.OverlayName == destination_overlay)
+              {
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("forwarded Message is in destination_overlay " + destination_overlay));
+              }
+                //              else if (gw.GateWay.mainPeer.ReloadConfig.OverlayName == destination_overlay) {
+                //if (reloadMsg.forwarding_header.destination_list[0].type == DestinationType.node &&
+                //   reloadMsg.forwarding_header.destination_list[0].destination_data.node_id == gw.GateWay.intraDomainPeer.Topology.LocalNode.Id) {
+                //  gw.GateWay.intraDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("Message received by GateWayPeer"));
+                //  gw.GateWay.Receive(source_overlay, reloadMsg);
+                //  return;
+                //}
+                //else {
+                //  //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("Message is forwarded within interdomain Overlay"));
+                //  gw.GateWay.intraDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("Message received by WRONG GateWayPeer but i can handle it so i remove the correct GW Peer from destination list")); //TODO: find better solution
+                //  reloadMsg.RemoveFirstDestEntry();
+                //  gw.GateWay.Receive(source_overlay, reloadMsg);
+                //  return;
+                //}
+
+              else if (ReloadGlobals.OverlayName == destination_overlay)
+              {
+                gw.GateWay.intraDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("Message received by GateWayPeer"));
+                gw.GateWay.Receive(source_overlay, reloadMsg);
+                return;
+              }
+              else if (ReloadGlobals.OverlayName != destination_overlay)
+              {
+                //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("Message: source_overlay " + source_overlay + " destination_overlay " + destination_overlay));
+                gw.GateWay.Send(source_overlay, destination_overlay, reloadMsg);
+                return;
+              }
+              else
+                return;
+            }
+            else if (ReloadGlobals.OverlayName == destination_overlay)
+            { //TODO:
+              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("forwarded Message is in destination_overlay " + destination_overlay));
+            }
+            else if (ReloadGlobals.OverlayName == source_overlay)
+            {
+              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("Message with forwarding options needs to be forwarded to GateWay Peer. destination_overlay is" + destination_overlay));
+              //---------------DEBUG
+              if (reloadMsg.forwarding_header.via_list != null) {
+                foreach (Destination destx in reloadMsg.forwarding_header.via_list)
+                  m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Via={0} ", destx.ToString()));
+              }
+              if (reloadMsg.forwarding_header.destination_list != null) {
+                foreach (Destination desty in reloadMsg.forwarding_header.destination_list)
+                  m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Dest={0} ", desty.ToString()));
+              }
+              //---------------DEBUG
+              //return;
+            }
+            else
+              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("Message is forwarded within interdomain Overlay"));
+          }
+        }
+        
+>>>>>>> c72920f5592677c84932e6ebf9afc0acefa648a4
         //is this a request to be forwarded?
         if (!m_forwarding.ProcessMsg(reloadMsg)) {
           /* First of all, validate message */

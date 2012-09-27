@@ -1,5 +1,5 @@
 ﻿/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-* Copyright (C) 2012 Thomas Kluge <t.kluge@gmx.de> 
+* Copyright (C) 2012, Telekom Deutschland GmbH 
 *
 * This file is part of RELOAD.NET.
 *
@@ -18,7 +18,6 @@
 *
 * see https://github.com/RELOAD-NET/RELOAD.NET
 * 
-* Last edited by: Alex <alexander.knauf@gmail.com>
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 using System;
@@ -28,6 +27,7 @@ using System.Text;
 using System.IO;
 using Microsoft.Ccr.Core;
 using System.Net;
+using SBX509;
 using TSystems.RELOAD.Utils;
 using TSystems.RELOAD.Transport;
 using TSystems.RELOAD.Topology;
@@ -43,7 +43,8 @@ namespace TSystems.RELOAD.Usage {
     DISCO,
     SIP_REGISTRATION,
     ACCESS_LIST,
-    CERTIFICATE_STORE,
+    CERTIFICATE_STORE_BY_NODE,
+    CERTIFICATE_STORE_BY_USER,
     REDIR_SERVICE_PROVIDER,
     NULL_USAGE,
             /// <summary>
@@ -291,9 +292,9 @@ namespace TSystems.RELOAD.Usage {
     /// </summary>
     /// <param name="rm">Reload message from wire.</param>
     /// <param name="reader">The BinaryReader</param>
-    /// <param name="reload_msg_size">Lentgh of the message in bytes.</param>
+    /// <param name="usage_size">Lentgh of the message in bytes.</param>
     /// <returns></returns>
-    IUsage FromReader(ReloadMessage rm, BinaryReader reader, long reload_msg_size);
+    IUsage FromReader(ReloadMessage rm, BinaryReader reader, long usage_size);
 
     /// <summary>
     /// Frame a Usage into a StoredDataValue struct.
@@ -983,7 +984,7 @@ namespace TSystems.RELOAD.Usage {
     /// </summary>
     /// <param name="rm">The ReloadMessage helper class</param>
     /// <param name="reader">The incomming byte stream reader</param>
-    /// <param name="reload_msg_size">Size of the Usage datagramm.</param>
+    /// <param name="usage_size">Size of the Usage datagramm.</param>
     /// <returns></returns>
     public IUsage FromReader(ReloadMessage rm, BinaryReader reader, long usage_size) {
       try {
@@ -1306,12 +1307,22 @@ namespace TSystems.RELOAD.Usage {
 
   public class CertificateStore : IUsage {
 
-    Usage_Code_Point codePoint = Usage_Code_Point.CERTIFICATE_STORE;
+    Usage_Code_Point codePoint;
     string username;
     NodeId localNodeId;
     string certificate;
-
+    private string resourceName;
+    bool byNode;
     UInt32 length;
+
+   /// <summary>
+    /// This contructor should be taken if you want to create a RedirServiceProvider from wire.
+    /// </summary>        
+    public CertificateStore(bool bnode)
+    {
+      codePoint = bnode ? Usage_Code_Point.CERTIFICATE_STORE_BY_NODE : Usage_Code_Point.CERTIFICATE_STORE_BY_USER;
+      byNode = bnode;
+    }
 
     public Usage_Code_Point CodePoint {
       get { return codePoint; }
@@ -1344,45 +1355,62 @@ namespace TSystems.RELOAD.Usage {
     }
 
     public uint dump(BinaryWriter write) {
-      throw new NotImplementedException();
+      throw new NotImplementedException("dump");
     }
 
-    public IUsage FromReader(ReloadMessage rm, BinaryReader reader, long reload_msg_size) {
-      throw new NotImplementedException();
+    public IUsage FromReader(ReloadMessage rm, BinaryReader reader, long usage_size)
+    {
+      try
+      {
+        long posBefore = reader.BaseStream.Position;
+        var type = (CertificateType)reader.ReadByte();
+        var unknown = reader.ReadByte();
+        UInt16 len = (UInt16)IPAddress.NetworkToHostOrder(reader.ReadInt16());
+        TElX509Certificate cert = new TElX509Certificate();
+        Byte[] bcert = reader.ReadBytes(len);
+        cert.LoadFromBuffer(bcert);
+        long posAfter = reader.BaseStream.Position;
+
+        usage_size = usage_size - (posAfter - posBefore);
+        length = (uint)(posAfter - posBefore); //TK not sure if this is correct
+      }
+      catch (Exception ex)
+      {
+        throw ex;
+      }
+      return this;
     }
 
     public StoredDataValue Encapsulate(bool exists) {
-      throw new NotImplementedException();
+      throw new NotImplementedException("Encapsulate");
     }
 
     public void AppProcedure(MessageTransport transport,
       List<FetchKindResponse> kindResponse) {
-      throw new NotImplementedException();
+      throw new NotImplementedException("AppProcedure");
     }
 
-    public string Report() {
-      throw new NotImplementedException();
+    public string Report()
+    {
+      return ToString();
     }
 
-    public string ResourceName {
-      get {
-        throw new NotImplementedException();
-      }
-      set {
-        throw new NotImplementedException();
-      }
+    public string ResourceName
+    {
+      get { return this.resourceName; }
+      set { resourceName = value; }
     }
 
     public string Name {
-      get { throw new NotImplementedException(); }
+      get { return byNode ? "certificate_store_by_node" : "certificate_store_by_user"; }
     }
 
     public UInt32 KindId {
-      get { throw new NotImplementedException(); }
+      get { return (UInt32)(byNode ? 3 : 4); }
     }
 
-    public ReloadGlobals.DataModel DataModel() {
-      throw new NotImplementedException();
+    public ReloadGlobals.DataModel DataModel(){
+      return byNode ? ReloadGlobals.CERTIFICATE_BY_NODE_DATA_MODEL : ReloadGlobals.CERTIFICATE_BY_USER_DATA_MODEL;
     }
 
   }
@@ -1412,7 +1440,7 @@ namespace TSystems.RELOAD.Usage {
       throw new NotImplementedException();
     }
 
-    public IUsage FromReader(ReloadMessage rm, BinaryReader reader, long reload_msg_size) {
+    public IUsage FromReader(ReloadMessage rm, BinaryReader reader, long usage_size) {
       throw new NotImplementedException();
     }
 
@@ -1477,7 +1505,7 @@ namespace TSystems.RELOAD.Usage {
       throw new NotImplementedException();
     }
 
-    public IUsage FromReader(ReloadMessage rm, BinaryReader reader, long reload_msg_size) {
+    public IUsage FromReader(ReloadMessage rm, BinaryReader reader, long usage_size) {
       throw new NotImplementedException();
     }
 

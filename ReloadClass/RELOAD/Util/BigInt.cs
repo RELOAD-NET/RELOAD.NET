@@ -1,5 +1,5 @@
 ﻿/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-* Copyright (C) 2012 Thomas Kluge <t.kluge@gmx.de> 
+* Copyright (C) 2012, Telekom Deutschland GmbH 
 *
 * This file is part of RELOAD.NET.
 *
@@ -18,7 +18,6 @@
 *
 * see https://github.com/RELOAD-NET/RELOAD.NET
 * 
-* Last edited by: Alex <alexander.knauf@gmail.com>
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 using System;
@@ -436,7 +435,7 @@ namespace TSystems.RELOAD.Utils {
             return new NodeId(result);
         }
 
-        public NodeId Max()
+        new public NodeId Max()
         {
             NodeId b = new NodeId();
             for (int i = 0; i < b.Digits; i++)
@@ -444,15 +443,13 @@ namespace TSystems.RELOAD.Utils {
             return b;
         }
 
-        public NodeId Min()
+        new public NodeId Min()
         {
             NodeId b = new NodeId();
             for (int i = 0; i < b.Digits; i++)
                 b.Data[i] = 0x00;
             return b;
         }
-
-
 
     }
 

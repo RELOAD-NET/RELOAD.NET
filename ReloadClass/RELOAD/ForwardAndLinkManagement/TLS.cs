@@ -1,5 +1,5 @@
 ﻿/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-* Copyright (C) 2012 Thomas Kluge <t.kluge@gmx.de> 
+* Copyright (C) 2012, Telekom Deutschland GmbH 
 *
 * This file is part of RELOAD.NET.
 *
@@ -18,7 +18,6 @@
 *
 * see https://github.com/RELOAD-NET/RELOAD.NET
 * 
-* Last edited by: Alex <alexander.knauf@gmail.com>
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 using System;
@@ -371,6 +370,13 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
         /// <param name="Buffer">The buffer.</param>
         private void SBB_OnData(object Sender, byte[] Buffer)
         {
+/*            ++ReloadGlobals.DbgPacketCount;
+            File.WriteAllBytes(@"C:\Temp\RELOAD\data0001.dmpa" + ReloadGlobals.DbgPacketCount.ToString("0000") + ".dmp", Buffer);
+            
+            //TKTEST
+            if (Buffer.Length > 500)
+              Buffer = File.ReadAllBytes(@"C:\Temp\RELOAD\data0001.dmp");
+   */
             try
             {
               byte[] temp_buf = null;
@@ -429,9 +435,22 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                                 ReloadFLMEventHandler(this,
                                     new ReloadFLMEventArgs(ReloadFLMEventArgs.ReloadFLMEventTypes.RELOAD_EVENT_RECEIVE_OK, connectionTableEntry, reloadMsg));
                             }
+                                // message was invalid but a least the size could be extracted, try to skip to next packet
+                                else if (thisMsgBytes != 0)
+                                {
+                                  bytesProcessed += thisMsgBytes;
+                                  association.InputBufferOffset -= (int)thisMsgBytes; /* Help rx to terminate */
+                                }
                             else
                             {
-                              if (buf != null && buf.Length > 500)//bytecount=9 => Ack
+                                  m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_{0}: invalid message ignored!", Sender is ReloadTLSServer ? "S" : "C"));
+                                  association.InputBufferOffset = 0;  /* Help rx to terminate */
+                                  return;
+                                }
+                            }
+                            else
+                            {
+                                if (buf != null && buf.Length > 500)
                                 {
                                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, String.Format("TLS_{0}: Data of length {1} inside thrown block!", Sender is ReloadTLSServer ? "S" : "C", Buffer.Length));
                                     //break;
