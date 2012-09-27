@@ -138,9 +138,9 @@ namespace TSystems.RELOAD {
 	 * and gatheredStoreDatas. Used by GatherCommandsInQueue Method 
 	 */
 
-	 private Queue<List<StoredDataSpecifier>> gatheredSpecifiersQueue;
+	 private Port<List<StoredDataSpecifier>> gatheredSpecifiersQueue;
 
-	 private Queue<List<StoreKindData>> gatheredStoreDatasQueue;
+   private Port<List<StoreKindData>> gatheredStoreDatasQueue;
 
 	 /* 
 	 * These Dictionaries are used for store and fetch commands which
@@ -201,9 +201,9 @@ namespace TSystems.RELOAD {
 
       gatheredStoreDatas = new List<StoreKindData>();
 	  
-	  gatheredSpecifiersQueue = new Queue<List<StoredDataSpecifier>>();
+	  gatheredSpecifiersQueue = new Port<List<StoredDataSpecifier>>();
 
-	  gatheredStoreDatasQueue = new Queue<List<StoreKindData>>();
+    gatheredStoreDatasQueue = new Port<List<StoreKindData>>();
 
 	  storeViaGateway = new Dictionary<List<StoreKindData>, NodeId>();
 
@@ -263,12 +263,12 @@ namespace TSystems.RELOAD {
       IUsage usage = null;
       StoredDataSpecifier specifier = null;
       /* Check  plausibility of user commands */
-      if (m_ReloadConfig.CommandQueue.Count > 0 &&
-         command != (string)m_ReloadConfig.CommandQueue.Peek()) {
+      if (m_ReloadConfig.CommandQueuePort.ItemCount > 0 &&
+         command != (string)m_ReloadConfig.CommandQueuePort.Test()) {
         throw new ArgumentException(String.Format(
             "Your command {0} is not the same as previews command {1}.",
             command,
-            (string)m_ReloadConfig.CommandQueue.Peek()));
+            (string)m_ReloadConfig.CommandQueuePort.Test()));
       }
       /* Process store command */
       if (command.Equals("Store")) {
@@ -324,7 +324,7 @@ namespace TSystems.RELOAD {
 			{
 				if (viaGateway != null)
 					storeViaGateway.Add(gatheredStoreDatas, viaGateway);
-				gatheredStoreDatasQueue.Enqueue(gatheredStoreDatas);
+				gatheredStoreDatasQueue.Post(gatheredStoreDatas);
 				gatheredStoreDatas = new List<StoreKindData>();
 			}
 		}
@@ -357,19 +357,33 @@ namespace TSystems.RELOAD {
 			{
 				if (viaGateway != null)
 					fetchViaGateway.Add(gatheredSpecifiers, viaGateway);
-				gatheredSpecifiersQueue.Enqueue(gatheredSpecifiers);
+				gatheredSpecifiersQueue.Post(gatheredSpecifiers);
 				gatheredSpecifiers = new List<StoredDataSpecifier>();
 			}
 			
 		}     
 	}
 
+
+    public IEnumerator<ITask> StoreTask() {
+      m_ReloadConfig.CommandQueuePort.Post("Store");
+      yield break;
+    }
+
+    
+    public IEnumerator<ITask> CommandTask(String sCommand) {
+      m_ReloadConfig.CommandQueuePort.Post(sCommand);
+      yield break;
+    }
+
+    
     public void Store() {
-      m_ReloadConfig.CommandQueue.Enqueue("Store");
+    Arbiter.Activate(ReloadConfig.DispatcherQueue, new IterativeTask(StoreTask));
     }
 
     public void SendCommand(String sCommand) {
-      m_ReloadConfig.CommandQueue.Enqueue(sCommand);
+
+      Arbiter.Activate(ReloadConfig.DispatcherQueue, new IterativeTask<String>(sCommand, CommandTask));      
     }
 
     #endregion
@@ -378,146 +392,154 @@ namespace TSystems.RELOAD {
 
     public IEnumerator<ITask> CommandCheckTask() {
       while (m_ReloadConfig.State < ReloadConfig.RELOAD_State.Exit) {
-        if (ReloadConfig.CommandQueue != null) {
-          foreach (string s in ReloadConfig.CommandQueue) {
-            if (s == null)
-              continue;
+        //lock (m_ReloadConfig.CommandQueue) 
+        {
+          //TODO: geht nur für GatherCommandsInQueue
+          if (ReloadConfig.CommandQueuePort.ItemCount > 0 && ReloadConfig.CommandQueuePort.ItemCount == (gatheredSpecifiersQueue.ItemCount + gatheredStoreDatasQueue.ItemCount)) {
+            string s;
+            //ReloadConfig.CommandQueuePort.Test(out s);
+            while (ReloadConfig.CommandQueuePort.Test(out s)) {
+              
+              if (s == null)
+                continue;
 
-            if (s == "PreJoin") {
-              ReloadConfig.IamClient = false;
+              if (s == "PreJoin") {
+                ReloadConfig.IamClient = false;
 
-              if (ReloadConfig.IsBootstrap)
-                ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, "This is the bootstrap server");
-              else {
-                Arbiter.Activate(ReloadConfig.DispatcherQueue, new IterativeTask<List<BootstrapServer>>(m_BootstrapServerList, m_transport.PreJoinProdecure));
+                if (ReloadConfig.IsBootstrap)
+                  ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, "This is the bootstrap server");
+                else {
+                  Arbiter.Activate(ReloadConfig.DispatcherQueue, new IterativeTask<List<BootstrapServer>>(m_BootstrapServerList, m_transport.PreJoinProdecure));
+                }
               }
-            }
-            else if (s.StartsWith("Store")) {
+              else if (s.StartsWith("Store")) {
 
-              //Queue or not?
-              if (gatheredStoreDatasQueue.Count > 0)
-                gatheredStoreDatas = gatheredStoreDatasQueue.Dequeue();
+                //Queue or not?
+                //if (gatheredStoreDatasQueue.ItemCount > 0)
+                  gatheredStoreDatas = (List<StoreKindData>)gatheredStoreDatasQueue;
 
-              string resourceName = gatheredStoreDatas[0].Values[0].Value.GetUsageValue.ResourceName;
-              ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_USAGE,
-                String.Format("Calling Store: {0}", resourceName));
-              List<StoreKindData> storeKindData = new List<StoreKindData>();
-              storeKindData.AddRange(gatheredStoreDatas);
-              m_transport.StoreDone = new Port<ReloadDialog>();
-
-              if (storeViaGateway.ContainsKey(gatheredStoreDatas)) { // --joscha
-                NodeId via  = storeViaGateway[gatheredStoreDatas];
-                storeViaGateway.Remove(gatheredStoreDatas);
-                Arbiter.Activate(ReloadConfig.DispatcherQueue,
-                  new IterativeTask<string, List<StoreKindData>,
-                    NodeId>(resourceName, storeKindData, via, m_transport.Store));
-              }
-              else
-                Arbiter.Activate(ReloadConfig.DispatcherQueue,
-                  new IterativeTask<string, List<StoreKindData>>(
-                      resourceName, storeKindData, m_transport.Store));
-
-              Arbiter.Activate(m_ReloadConfig.DispatcherQueue,
-                  Arbiter.Receive(true, m_transport.StoreDone, dialog => {
-                    if (StoreCompleted != null) StoreCompleted(dialog); }));
-              gatheredStoreDatas.Clear();
-            }
-            else if (s.StartsWith("Fetch")) {
-              List<StoredDataSpecifier> specifier;    //necessary to pass a valid reference to m_transport.Fetch
-
-              //Queue or not?
-              if (gatheredSpecifiersQueue.Count > 0)
-                specifier = gatheredSpecifiersQueue.Dequeue();
-              else
-                specifier = gatheredSpecifiers;
-
-              if (specifier == null) {
-                break;  //TODO:
-              }
-              string FetchUrl = specifier[0].ResourceName;
-
-              if (FetchUrl.Length > 0) {
-                ReloadConfig.ConnEstStart = DateTime.Now;
+                string resourceName = gatheredStoreDatas[0].Values[0].Value.GetUsageValue.ResourceName;
                 ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_USAGE,
-                    String.Format("Calling Fetch: {0}", FetchUrl));
+                  String.Format("Calling Store: {0}", resourceName));
+                List<StoreKindData> storeKindData = new List<StoreKindData>();
+                storeKindData.AddRange(gatheredStoreDatas);
+                m_transport.StoreDone = new Port<ReloadDialog>();
 
-                /* Ports used to notify */
-                m_transport.FetchDone = new Port<List<IUsage>>();
-                m_transport.AppAttachDone = new Port<IceCandidate>();
-
-                List<StoredDataSpecifier> specifiers = new List<StoredDataSpecifier>(); //copy of specifier needed for fetch task
-                specifiers.AddRange(specifier);
-
-                if (fetchViaGateway.ContainsKey(specifier)) { // --joscha
-                  NodeId via = fetchViaGateway[specifier];
-                  fetchViaGateway.Remove(specifier);
+                if (storeViaGateway.ContainsKey(gatheredStoreDatas)) { // --joscha
+                  NodeId via = storeViaGateway[gatheredStoreDatas];
+                  storeViaGateway.Remove(gatheredStoreDatas);
                   Arbiter.Activate(ReloadConfig.DispatcherQueue,
-                    new IterativeTask<string, List<StoredDataSpecifier>, NodeId>(
-                      FetchUrl, specifiers, via, m_transport.Fetch));
+                    new IterativeTask<string, List<StoreKindData>,
+                      NodeId>(resourceName, storeKindData, via, m_transport.Store));
                 }
                 else
                   Arbiter.Activate(ReloadConfig.DispatcherQueue,
-                      new IterativeTask<string, List<StoredDataSpecifier>>(
-                          FetchUrl, specifiers, m_transport.Fetch));
+                    new IterativeTask<string, List<StoreKindData>>(
+                        resourceName, storeKindData, m_transport.Store));
+
+                Arbiter.Activate(m_ReloadConfig.DispatcherQueue,
+                    Arbiter.Receive(true, m_transport.StoreDone, dialog => {
+                      if (StoreCompleted != null) StoreCompleted(dialog);
+                    }));
+                gatheredStoreDatas.Clear();
               }
-              else
-                ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
-                    String.Format("Empty Fetch command!"));
+              else if (s.StartsWith("Fetch")) {
+                List<StoredDataSpecifier> specifier;    //necessary to pass a valid reference to m_transport.Fetch
 
-              /* Fetch completed notify everybody */
-              Arbiter.Activate(ReloadConfig.DispatcherQueue,
-                  Arbiter.Receive(true, m_transport.FetchDone,
-                      delegate(List<IUsage> usages) {
-                        if (FetchCompleted != null) FetchCompleted(usages);
-                        gatheredSpecifiers.Clear();
-                      }));
-              /* Corresponding AppAttach completed, notify everybody */
-              Arbiter.Activate(ReloadConfig.DispatcherQueue,
-                  Arbiter.Receive(true, m_transport.AppAttachDone, ice => {
-                    if (AppAttachCompleted != null) AppAttachCompleted(ice);
-                  }));              
-            }
-            else if (s == "Leave") {
-              ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO,
-                  String.Format("Received \"Leave\" command"));
+                //Queue or not?
+                if (gatheredSpecifiersQueue.ItemCount > 0)
+                  specifier = (List<StoredDataSpecifier>)gatheredSpecifiersQueue;
+                else
+                  specifier = gatheredSpecifiers;
 
-              if (ReloadConfig.IsBootstrap) {
+                if (specifier == null) {
+                  break;  //TODO:
+                }
+                string FetchUrl = specifier[0].ResourceName;
+
+                if (FetchUrl.Length > 0) {
+                  ReloadConfig.ConnEstStart = DateTime.Now;
+                  ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
+                      String.Format("Calling Fetch: {0}", FetchUrl));
+
+                  /* Ports used to notify */
+                  m_transport.FetchDone = new Port<List<IUsage>>();
+                  m_transport.AppAttachDone = new Port<IceCandidate>();
+
+                  List<StoredDataSpecifier> specifiers = new List<StoredDataSpecifier>(); //copy of specifier needed for fetch task
+                  specifiers.AddRange(specifier);
+
+                  if (fetchViaGateway.ContainsKey(specifier)) { // --joscha
+                    NodeId via = fetchViaGateway[specifier];
+                    fetchViaGateway.Remove(specifier);
+                    Arbiter.Activate(ReloadConfig.DispatcherQueue,
+                      new IterativeTask<string, List<StoredDataSpecifier>, NodeId>(
+                        FetchUrl, specifiers, via, m_transport.Fetch));
+                  }
+                  else
+                    Arbiter.Activate(ReloadConfig.DispatcherQueue,
+                        new IterativeTask<string, List<StoredDataSpecifier>>(
+                            FetchUrl, specifiers, m_transport.Fetch));
+                }
+                else
+                  ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
+                      String.Format("Empty Fetch command!"));
+
+                /* Fetch completed notify everybody */
+                Arbiter.Activate(ReloadConfig.DispatcherQueue,
+                    Arbiter.Receive(true, m_transport.FetchDone,
+                        delegate(List<IUsage> usages) {
+                          if (FetchCompleted != null) FetchCompleted(usages);
+                          gatheredSpecifiers.Clear();
+                        }));
+                /* Corresponding AppAttach completed, notify everybody */
+                Arbiter.Activate(ReloadConfig.DispatcherQueue,
+                    Arbiter.Receive(true, m_transport.AppAttachDone, ice => {
+                      if (AppAttachCompleted != null) AppAttachCompleted(ice);
+                    }));
+              }
+              else if (s == "Leave") {
                 ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO,
-                    String.Format("Bootstrap Server cannot leave"));
-              }
-              else {
-                if (ReloadConfig.IamClient) {
-                  Arbiter.Activate(ReloadConfig.DispatcherQueue,
-                      new IterativeTask<string, List<StoreKindData>>(ReloadConfig.SipUri,
-                          new List<StoreKindData>(), m_transport.Store));
+                    String.Format("Received \"Leave\" command"));
+
+                if (ReloadConfig.IsBootstrap) {
+                  ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO,
+                      String.Format("Bootstrap Server cannot leave"));
                 }
-                else
-                  Arbiter.Activate(ReloadConfig.DispatcherQueue, new IterativeTask<bool>(true, m_transport.HandoverKeys));
+                else {
+                  if (ReloadConfig.IamClient) {
+                    Arbiter.Activate(ReloadConfig.DispatcherQueue,
+                        new IterativeTask<string, List<StoreKindData>>(ReloadConfig.SipUri,
+                            new List<StoreKindData>(), m_transport.Store));
+                  }
+                  else
+                    Arbiter.Activate(ReloadConfig.DispatcherQueue, new IterativeTask<bool>(true, m_transport.HandoverKeys));
 
-                ReloadConfig.IamClient = true;
+                  ReloadConfig.IamClient = true;
+                }
+                // peer looses bootstrap flag, this is important for rejoin
+                //TKTODO Rejoin of bootstrap server not solved
               }
-              // peer looses bootstrap flag, this is important for rejoin
-              //TKTODO Rejoin of bootstrap server not solved
+              else if (s == "Exit") {
+                Finish();
+              }
+              else if (s == "Maintenance") {
+                if (!ReloadGlobals.fMaintenance)
+                  Arbiter.Activate(ReloadConfig.DispatcherQueue, new IterativeTask(Maintenance));
+                ReloadGlobals.fMaintenance = !ReloadGlobals.fMaintenance;
+              }
+              else if (s == "Info") {
+                PrintNodeInfo(m_topology, true);
+              }
             }
-            else if (s == "Exit") {
-              Finish();
-            }
-            else if (s == "Maintenance") {
-              if (!ReloadGlobals.fMaintenance)
-                Arbiter.Activate(ReloadConfig.DispatcherQueue, new IterativeTask(Maintenance));
-              ReloadGlobals.fMaintenance = !ReloadGlobals.fMaintenance;
-            }
-            else if (s == "Info") {
-              PrintNodeInfo(m_topology, true);
-            }
+            //ReloadConfig.CommandQueue.Clear();
           }
-          ReloadConfig.CommandQueue.Clear();
-        }
-        //ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_KEEPALIVE, "");
+          //ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_KEEPALIVE, "");
 
-        Port<DateTime> timeoutPort = new Port<DateTime>();
-        ReloadConfig.DispatcherQueue.EnqueueTimer(new TimeSpan(0, 0, 0, 0, 100 /* ms 100ms default */), timeoutPort);
-        yield return Arbiter.Receive(false, timeoutPort, x => { });
+          Port<DateTime> timeoutPort = new Port<DateTime>();
+          ReloadConfig.DispatcherQueue.EnqueueTimer(new TimeSpan(0, 0, 0, 0, 100 /* ms 100ms default */), timeoutPort);
+          yield return Arbiter.Receive(false, timeoutPort, x => { });
+        }
       }
     }
 
@@ -860,8 +882,8 @@ Predecessor cache:";
         m_forwarding = new ForwardingLayer(this);
         m_transport.Init(this);
 
-        ReloadConfig.State = ReloadConfig.RELOAD_State.Configured;
-        stateUpdates(ReloadConfig.RELOAD_State.Configured);
+        //ReloadConfig.State = ReloadConfig.RELOAD_State.Configured;
+        //stateUpdates(ReloadConfig.RELOAD_State.Configured);
         BootStrapConfig();
 
         m_ReloadConfig.StartJoining = DateTime.Now;
@@ -872,7 +894,11 @@ Predecessor cache:";
             new IterativeTask<List<BootstrapServer>>(m_BootstrapServerList,
             m_transport.PreJoinProdecure));
 
-        m_worker_thread.ReportProgress(100);
+//        m_worker_thread.ReportProgress(100); --joscha
+        InitUsageManager();
+        ReloadConfig.State = ReloadConfig.RELOAD_State.Configured;
+        stateUpdates(ReloadConfig.RELOAD_State.Configured);
+
         /* reporting service */
         Arbiter.Activate(ReloadConfig.DispatcherQueue, new IterativeTask(Reporting));
         /* chord-ping-interval */
@@ -894,6 +920,7 @@ Predecessor cache:";
       //m_UsageManager.RegisterUsage(new Haw.DisCo.DisCoUsage(m_UsageManager));
       //m_UsageManager.RegisterUsage(new Haw.DisCo.ShaReUsage(m_UsageManager));
 	  m_UsageManager.RegisterUsage(new RedirServiceProvider(m_UsageManager));
+    m_UsageManager.RegisterUsage(new ImageStoreUsage(m_UsageManager));
     }
 
     private void BootStrapConfig() {

@@ -32,25 +32,30 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="DnDns">
-      <HintPath>..\Lib\DnDns.dll</HintPath>
+      <HintPath>..\Extern\DnDns.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.Ccr.Core">
-      <HintPath>..\Lib\Microsoft.Ccr.Core.dll</HintPath>
+      <HintPath>..\Extern\CCR R2\Microsoft.Ccr.Core.dll</HintPath>
     </Reference>
-    <Reference Include="SecureBlackbox">
-      <HintPath>..\Lib\SecureBlackbox.dll</HintPath>
+    <Reference Include="SecureBlackbox, Version=9.1.215.0, Culture=neutral, PublicKeyToken=5a62fa96d0ac431a, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\Extern\SBB OLD\SecureBlackbox.dll</HintPath>
     </Reference>
-    <Reference Include="SecureBlackbox.PKI">
-      <HintPath>..\Lib\SecureBlackbox.PKI.dll</HintPath>
+    <Reference Include="SecureBlackbox.PKI, Version=9.1.215.0, Culture=neutral, PublicKeyToken=5a62fa96d0ac431a, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\Extern\SBB OLD\SecureBlackbox.PKI.dll</HintPath>
     </Reference>
-    <Reference Include="SecureBlackbox.SSLClient">
-      <HintPath>..\Lib\SecureBlackbox.SSLClient.dll</HintPath>
+    <Reference Include="SecureBlackbox.SSLClient, Version=9.1.215.0, Culture=neutral, PublicKeyToken=5a62fa96d0ac431a, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\Extern\SBB OLD\SecureBlackbox.SSLClient.dll</HintPath>
     </Reference>
-    <Reference Include="SecureBlackbox.SSLCommon">
-      <HintPath>..\Lib\SecureBlackbox.SSLCommon.dll</HintPath>
+    <Reference Include="SecureBlackbox.SSLCommon, Version=9.1.215.0, Culture=neutral, PublicKeyToken=5a62fa96d0ac431a, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\Extern\SBB OLD\SecureBlackbox.SSLCommon.dll</HintPath>
     </Reference>
-    <Reference Include="SecureBlackbox.SSLServer">
-      <HintPath>..\Lib\SecureBlackbox.SSLServer.dll</HintPath>
+    <Reference Include="SecureBlackbox.SSLServer, Version=9.1.215.0, Culture=neutral, PublicKeyToken=5a62fa96d0ac431a, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\Extern\SBB OLD\SecureBlackbox.SSLServer.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -64,6 +69,7 @@
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RELOAD\Topology\AccessControl.cs" />
+    <Compile Include="RELOAD\Usage\ImageStoreUsage.cs" />
     <Compile Include="RELOAD\Util\BigInt.cs" />
     <Compile Include="RELOAD\ForwardAndLinkManagement\ConnectionTable.cs" />
     <Compile Include="RELOAD\Transport\Dialog.cs" />
@@ -94,7 +100,9 @@
     <Compile Include="RELOAD\Usage\Usages.cs" />
     <Compile Include="RELOAD\Util\Utils.cs" />
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <None Include="MachineClass.cd" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

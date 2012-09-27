@@ -56,6 +56,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
 
     internal class OverlayLinkTLS
     {
+        private byte[] receive_buffer = null; // only used without ssl and fragmentation 12000= max ssl segment
 
         private Socket m_ListenerSocket = null;
 
@@ -135,16 +136,6 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 /* Add or update connection list */
                 //TKTODO needed? m_connection_table.updateEntry(reload_server);
                 reload_server.Open();
-                if (ReloadGlobals.TLS_PASSTHROUGH) //hack for ReloadGlobals.TLS_PASSTHROUGH
-                {
-                    if (reload_server.Active == true) 
-                    {
-                        reload_server.Enabled = false;
-                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_S: SSL DISABLED"));
-                    }
-                    else
-                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_S: SSL NOT DISABLED"));
-                }
                 Arbiter.Activate(m_DispatcherQueue, new IterativeTask<object>(reload_server, linkReceive));
                 if (associatedSocket != null)
                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_SOCKET, String.Format("TLS_S: {0}, Accepted client {1}", reload_server.GetHashCode(), associatedSocket.RemoteEndPoint));
@@ -158,17 +149,6 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
         /// <returns></returns>
         private IEnumerator<ITask> linkReceive(object secure_object)
         {
-          if (ReloadGlobals.TLS_PASSTHROUGH && secure_object is ReloadTLSServer) //hack for ReloadGlobals.TLS_PASSTHROUGH
-            {
-                if (((ReloadTLSServer)secure_object).Active == true)
-                {
-                    ((ReloadTLSServer)secure_object).Enabled = false;
-                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_linkReceive: SSL DISABLED"));
-                }
-                else
-                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_linkReceive: SSL NOT DISABLED"));
-            }
-
             IAssociation association = (IAssociation)secure_object;
             while (m_ReloadConfig.State  < ReloadConfig.RELOAD_State.Exit)
             {
@@ -303,17 +283,6 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 /* Add/update connection list */
                 send_params.connectionTableEntry = m_connection_table.updateEntry(reload_client);
 
-
-                if (ReloadGlobals.TLS_PASSTHROUGH)//hack for ReloadGlobals.TLS_PASSTHROUGH
-                {
-                    if (reload_client.Active == true)
-                    {
-                        reload_client.Enabled = false;
-                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_C: SSL DISABLED"));
-                    }
-                    else
-                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_C: SSL NOT DISABLED"));
-                }
                 if (ReloadGlobals.FRAGMENTATION == true)
                 {
                     socket.NoDelay = true; //--joscha no nagle
@@ -365,23 +334,23 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
         private void SBB_OnOpenConnection(object Sender)
         {
             m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TLS, String.Format("TLS_{0}: TLS connection opened", Sender is ReloadTLSServer ? "S" : "C"));
+            if (ReloadGlobals.TLS_PASSTHROUGH == true) {
+              if (Sender is ReloadTLSServer)//hack for ReloadGlobals.TLS_PASSTHROUGH
+            {
+                ReloadTLSServer server = ((ReloadTLSServer)Sender);
+                server.Enabled = false;
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_S SBB_OnOpenConnection: SSL DISABLED"));
+
+              }
+              if (Sender is ReloadTLSClient)//hack for ReloadGlobals.TLS_PASSTHROUGH
+            {
+                ReloadTLSClient client = ((ReloadTLSClient)Sender);
+                client.Enabled = false;
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_C SBB_OnOpenConnection: SSL DISABLED"));
+              }
+            }
             IAssociation association = ((IAssociation)Sender);
             association.TLSConnectionIsOpen = true;
-
-            if (Sender is ReloadTLSServer)//hack for ReloadGlobals.TLS_PASSTHROUGH
-            {
-                ReloadTLSServer server =  ((ReloadTLSServer)Sender);
-                if (ReloadGlobals.TLS_PASSTHROUGH)
-                {
-                    if (server.Active == true)
-                    {
-                        server.Enabled = false;
-                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_S SBB_OnOpenConnection: SSL DISABLED"));
-                    }
-                    else
-                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_S SBB_OnOpenConnection: SSL NOT DISABLED"));
-                }
-            }
 
             if (association.TLSConnectionOpen != null)
             {
@@ -404,6 +373,17 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
         {
             try
             {
+              byte[] temp_buf = null;
+              if (receive_buffer != null) {
+                temp_buf = new byte[Buffer.Length + receive_buffer.Length];
+
+                Array.Copy(receive_buffer, 0, temp_buf, 0, receive_buffer.Length);
+                Array.Copy(Buffer, 0, temp_buf, receive_buffer.Length, Buffer.Length);
+                Buffer = temp_buf;
+                receive_buffer = null;
+              }
+
+              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FRAGMENTATION, String.Format("SBB_OnData Buffer.Length={0}", Buffer.Length));
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_SOCKET, String.Format("TLS_{0}: Data received, len {1}", Sender is ReloadTLSServer ? "S" : "C", Buffer.Length));
                 IAssociation association = (IAssociation)Sender;
                 ReloadConnectionTableEntry connectionTableEntry = m_connection_table.updateEntry(Sender);
@@ -416,22 +396,33 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                         long bytesProcessed = 0;
                         BinaryReader reader = new BinaryReader(new MemoryStream(Buffer));
                         do { //TODO: optimize! Problem: streaming socket => no guarantee to receive only a single ReloadMessage in one SBB_OnData call also reception of partial messages possible (not handled so far)
+                          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FRAGMENTATION, String.Format("SBB_OnData Buffer.Length={0} bytesProcessed={1}", Buffer.Length, bytesProcessed));
                             Byte[] buf = new Byte[Buffer.Length - bytesProcessed];
                             reader.BaseStream.Seek(bytesProcessed, SeekOrigin.Begin);
                             reader.Read(buf, 0, (int)(Buffer.Length - bytesProcessed));
                             uint bytecount=0;
-                            AnalysedBuffer = analyseFrameHeader(connectionTableEntry, buf, ref bytecount);
+                            bool isAck=false;
+                            AnalysedBuffer = analyseFrameHeader(connectionTableEntry, buf, ref bytecount, ref isAck);
+                            
                             bytesProcessed += bytecount;    //framing header
+                            if (isAck == true) {
 
-                            if (AnalysedBuffer != null)
+                            }
+
+                            else if (AnalysedBuffer != null)
                             {
+                              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FRAGMENTATION, String.Format("SBB_OnData buf.Length={0} AnalysedBuffer.Length={1} bytesProcessed={2}", buf.Length, AnalysedBuffer.Length, bytesProcessed));
                                 //bytesProcessed = 0;
                                 long temp = bytesProcessed;
                                 reloadMsg = new ReloadMessage(m_ReloadConfig).FromBytes(AnalysedBuffer, ref temp, ReloadMessage.ReadFlags.full);
-                                if (reloadMsg == null) {
-
+                                if (reloadMsg.reload_message_body == null) {  //not all bytes of an fragmented message are received yet
+                                  
+                                  receive_buffer = new byte[buf.Length];
+                                  m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("reloadMsg.reload_message_body = NULL receive_buffer.length=" + receive_buffer.Length));
+                                  Array.Copy(buf, 0, receive_buffer, 0, buf.Length);
+                                  return;
                                 }
-                                 //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, String.Format("MessageLength={0}", temp));
+                                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, String.Format("MessageLength={0}", temp));
                                 bytesProcessed += temp;
                                 reloadMsg.LastHopNodeId = connectionTableEntry.NodeID;
 
@@ -440,7 +431,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                             }
                             else
                             {
-                                if (buf != null && buf.Length > 500)
+                              if (buf != null && buf.Length > 500)//bytecount=9 => Ack
                                 {
                                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, String.Format("TLS_{0}: Data of length {1} inside thrown block!", Sender is ReloadTLSServer ? "S" : "C", Buffer.Length));
                                     //break;
@@ -779,7 +770,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
         /// <param name="fh_message">The fh_message.</param>
         /// <param name="reload_connection">The reload_connection.</param>
         /// <returns></returns>
-        private byte[] analyseFrameHeader(ReloadConnectionTableEntry connectionTableEntry, byte[] fh_message, ref uint read_bytes)
+        private byte[] analyseFrameHeader(ReloadConnectionTableEntry connectionTableEntry, byte[] fh_message, ref uint read_bytes, ref bool ack)
         {
             if (ReloadGlobals.Framing)
             {
@@ -787,6 +778,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 FramedMessageType type = (FramedMessageType)fh_message[0];
                 if (type == FramedMessageType.ack)
                 {
+                  ack = true;
                     FramedMessageAck fh_ack = FMA_FromBytes(fh_message);
                     read_bytes = 9;
 
@@ -819,6 +811,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 {
                     if (type == FramedMessageType.data)
                     {
+                      ack = false;
                         FramedMessageData fh_data = FMD_FromBytes(fh_message);
                         read_bytes = 8; //TODO: why 8???
                         byte[] fh_stripped_data = new byte[fh_message.Length - 8];

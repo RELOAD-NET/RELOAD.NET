@@ -45,7 +45,11 @@ namespace TSystems.RELOAD.Usage {
     ACCESS_LIST,
     CERTIFICATE_STORE,
     REDIR_SERVICE_PROVIDER,
-    NULL_USAGE
+    NULL_USAGE,
+            /// <summary>
+        /// See <see cref="ImageStoreUsage"/>.
+        /// </summary>
+        IMAGE_STORE
   }
 
 
@@ -888,7 +892,11 @@ namespace TSystems.RELOAD.Usage {
           throw new NotSupportedException(
               String.Format("The type {0} is not supported!", type));
       }
-      sip.resourceName = myManager.m_ReloadConfig.SipUri;
+      if (arguments.Length > 1)
+        sip.resourceName = (string)arguments[1];
+      else
+        sip.resourceName = myManager.m_ReloadConfig.SipUri;
+
       return sip;
     }
 
@@ -1166,9 +1174,6 @@ namespace TSystems.RELOAD.Usage {
 
         node = (UInt16)(System.Net.IPAddress.NetworkToHostOrder(reader.ReadInt16()));
 
-        //int templength = (UInt16)(System.Net.IPAddress.NetworkToHostOrder(reader.ReadInt16()));
-        //reader.Read(new byte[templength],0,templength);//TODO: remove this
-
         string resourceName = (nameSpace + "," + level + "," + node);
 
         RedirServiceProvider serviceProvider = new RedirServiceProvider(serviceProviderID, resourceName, nameSpace, level, node, myManager);
@@ -1205,8 +1210,6 @@ namespace TSystems.RELOAD.Usage {
 
     public UInt32 dump(BinaryWriter writer)     // RedirServiceProvider
     {
-      //myManager.m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "RedirServiceProvider dump: " + this.Report());
-
       uint length_new = 0;
 
       long DataValueLengthPosition = writer.BaseStream.Position;
@@ -1214,8 +1217,6 @@ namespace TSystems.RELOAD.Usage {
       length_new += 4;
 
       length_new += ReloadGlobals.WriteOpaqueValue(writer, data.serviceProvider.Data, 0xFFFF);
-      //writer.Write(data.serviceProvider.Data); //NodeID
-      //length_new = (UInt16)ReloadGlobals.NODE_ID_DIGITS;
       length_new += (ushort)ReloadGlobals.WriteOpaqueValue(writer, Encoding.ASCII.GetBytes(data.nameSpace), 0xFFFF);
 
       writer.Write(System.Net.IPAddress.HostToNetworkOrder((short)data.level));
@@ -1228,11 +1229,7 @@ namespace TSystems.RELOAD.Usage {
       writer.Write(System.Net.IPAddress.HostToNetworkOrder((int)(DataValueEndPosition - DataValueLengthPosition - 4)));
       writer.BaseStream.Seek(DataValueEndPosition, SeekOrigin.Begin);
 
-      //byte[] threek = new byte[3000];
-      //length_new += ReloadGlobals.WriteOpaqueValue(writer,threek,0xFFFF); //TODO: remove this
-
       return length_new;
-
     }
 
     public StoredDataValue Encapsulate(Boolean exists) {

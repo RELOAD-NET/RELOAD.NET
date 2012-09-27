@@ -95,7 +95,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="SecureBlackbox">
-      <HintPath>..\Lib\SecureBlackbox.dll</HintPath>
+      <HintPath>..\Extern\SecureBlackbox.NET\Assemblies\NET_40\SecureBlackbox.dll</HintPath>
     </Reference>
     <Reference Include="System">
       <Name>System</Name>

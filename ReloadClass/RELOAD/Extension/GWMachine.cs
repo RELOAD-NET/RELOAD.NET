@@ -27,55 +27,85 @@ using System.Linq;
 using System.Text;
 using System.ComponentModel;
 using TSystems.RELOAD.Transport;
+using System.IO;
+using TSystems.RELOAD.Topology;
+using TSystems.RELOAD.Storage;
+using TSystems.RELOAD.Utils;
+using SBX509;
+using SBPublicKeyCrypto;
 
-namespace TSystems.RELOAD.Extension
-{
-    public class GWMachine : Machine
-    {
-        //reference for GateWay instance: connects to GWMachine Instances
-        private GateWay m_GateWay = null;
+namespace TSystems.RELOAD.Extension {
+  public class GWMachine : Machine {
+    //reference for GateWay instance: connects to GWMachine Instances
+    private GateWay m_GateWay = null;
+    //maps TransactionID to requested ResourceID needed for signature verification!
+    private Dictionary<ulong, ResourceId> FetchIdMap = null;
 
-        public GateWay GateWay
-        {
-            get { return m_GateWay; }
-            set { m_GateWay = value; }
+    public GateWay GateWay {
+      get { return m_GateWay; }
+      set { m_GateWay = value; }
+    }
+
+    public GWMachine()
+      : base() {
+      FetchIdMap = new Dictionary<ulong, ResourceId>();
+    }
+
+    internal void Inject(ReloadMessage reloadMsg) {
+
+      if (reloadMsg.reload_message_body.RELOAD_MsgCode == RELOAD_MessageCode.Fetch_Answer) {  //resign StoredData
+
+        ResourceId res_id = GateWay.getResIdforTransactionId(reloadMsg.TransactionID);
+        GateWay.removeResIdforTransactionId(reloadMsg.TransactionID);
+
+        FetchAns answ = (FetchAns)reloadMsg.reload_message_body;
+        List<FetchKindResponse> fetchKindResponses = answ.KindResponses;
+        foreach (FetchKindResponse kind in fetchKindResponses) {
+          foreach (StoredData sd in kind.values) {
+            sd.SignData(res_id, kind.kind, ReloadConfig.AccessController.MyIdentity, ReloadConfig);
+            ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, "GW: DATA RESIGNED!");
+          }
         }
+      }
 
-        public GWMachine() : base()
-        {
+      reloadMsg.security_block = new SecurityBlock(ReloadConfig, ReloadConfig.AccessController.MyIdentity);
+      reloadMsg.security_block.SignMessage(ReloadGlobals.OverlayHash, //TODO: remove overlayhash from glals
+       reloadMsg.TransactionID.ToString(), reloadMsg.reload_message_body);
+      ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, "GW: " + reloadMsg.reload_message_body.RELOAD_MsgCode.ToString() + "Message resigned (new SecurityBlock)");
 
-        }
-
-        public void Inject(string from_overlay, ReloadMessage message)
-        {
-
-            //message.security_block.OriginatorNodeID = ReloadConfig.LocalNodeID;
-
-            //if (ReloadConfig.MyCertificate != null)
-            //    message.security_block.Cert = ReloadConfig.MyCertificate.CertificateBinary;
-
-            //re-sign for new Overlay
-            //....
-
-            //forward to Topology plugin
-            //if (false == Forwarding.ProcessMsg(message))
-            {
-                Transport.receive_message(message);
-            }
-
-
-
-
-        }
-        //protected override void Completed(object sender, RunWorkerCompletedEventArgs e) //TODO: wieder löschen??
-        //{
-            //string forwardURL = "sip:*@" + ReloadConfig.OverlayName;
-            //// storage as URI reference
-            //GatherCommands("Store", Usage_Code_Point.SIP_REGISTRATION, 1, forwardURL);
-
-            //SendCommand("Store");
-        //}    
-      
+      Transport.receive_message(reloadMsg);
 
     }
+
+    //verifies message signature and StoredData Signatures and authenticates the certificates used to sign the signatures
+    internal bool Validate(ReloadMessage reloadMsg) {
+      bool requestPermitted = ReloadConfig.AccessController.RequestPermitted(reloadMsg);
+      if (reloadMsg.reload_message_body.RELOAD_MsgCode == RELOAD_MessageCode.Fetch_Answer) {  //verify StoredData signature
+        ResourceId res_id = GateWay.getResIdforTransactionId(reloadMsg.TransactionID);
+
+        FetchAns answ = (FetchAns)reloadMsg.reload_message_body;
+        if (reloadMsg.reload_message_body.RELOAD_MsgCode == RELOAD_MessageCode.Fetch_Answer) {
+          List<FetchKindResponse> fetchKindResponses = answ.KindResponses;
+          foreach (FetchKindResponse kind in fetchKindResponses) {
+            foreach (StoredData sd in kind.values) {
+              if (!ReloadConfig.AccessController.validateDataSignature(res_id, kind.kind, sd)) {
+                kind.values.Remove(sd);
+                ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, "GW: DATA SIGNATURE INVALID!! => dropped");
+              }
+              else
+                ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, "GW: INCOMING DATA SIGNATURE VALID!!");
+            }
+          }
+        }
+      }
+      if (requestPermitted) {
+        ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, "GW: INCOMING MESSAGE VERIFIED");
+        return true;
+      }
+      else {
+        ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, "GW: INCOMING MESSAGE NOT VERIFIED!!!!!!!!!!!!!!!!");
+        return false;
+      }
+    }
+  }
 }

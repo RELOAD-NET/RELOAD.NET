@@ -184,7 +184,7 @@ namespace TSystems.RELOAD.Transport {
 
             if (answ != null) {
               if ((pingOption & PingOption.finger) != 0) {
-                  foreach (Topology.TopologyPlugin.RoutingTable.FTableEntry fte in m_topology.routing_table.FingerTable) {
+                foreach (Topology.TopologyPlugin.RoutingTable.FTableEntry fte in m_topology.routing_table.FingerTable) {
                   if (fte.Finger == dest.destination_data.ressource_id) {
                     fte.dtLastSuccessfullFinger = DateTime.Now;
                     fte.Successor = reloadRcvMsg.OriginatorID;
@@ -827,7 +827,7 @@ namespace TSystems.RELOAD.Transport {
         if (ReloadGlobals.AutoExe) {
           m_machine.SendCommand("Exit");
         }
-      }      
+      }
     } // End PreJoin        
 
     /// <summary>
@@ -839,9 +839,9 @@ namespace TSystems.RELOAD.Transport {
       Port<bool> attachNext) {
       Destination dest = new Destination(finger.Finger);
       ReloadMessage reloadSendMsg = create_attach_req(dest, false);
-      ReloadDialog reloadDialog = null;      
+      ReloadDialog reloadDialog = null;
 
-      int RetransmissionTime = ReloadGlobals.RetransmissionTime + 
+      int RetransmissionTime = ReloadGlobals.RetransmissionTime +
         ReloadGlobals.MaxTimeToSendPacket;
       int iRetrans = ReloadGlobals.MaxRetransmissions;
 
@@ -856,76 +856,78 @@ namespace TSystems.RELOAD.Transport {
       if (nextHopNode == null) //{
         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
         String.Format("No Route to Finger! {0}", finger.Finger));
-        //attachNext.Post(true);
-       // yield break;
+      //attachNext.Post(true);
+      // yield break;
       //}
       //else {
-        while (iRetrans >= 0 && m_ReloadConfig.State < ReloadConfig.RELOAD_State.Shutdown) {
-          try {
-            reloadDialog = new ReloadDialog(m_ReloadConfig, m_flm, nextHopNode);
-            m_forwarding.LoopedTrans = new Port<UInt64>();
-            if (reloadDialog == null)
-              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_RELOAD,
-              "ReloadDialog null!");
+      while (iRetrans >= 0 && m_ReloadConfig.State < ReloadConfig.RELOAD_State.Shutdown) {
+        try {
+          reloadDialog = new ReloadDialog(m_ReloadConfig, m_flm, nextHopNode);
+          m_forwarding.LoopedTrans = new Port<UInt64>();
+          if (reloadDialog == null)
+            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_RELOAD,
+            "ReloadDialog null!");
 
-            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO,
-              String.Format("Finger-{0} via {1} ==> Dest={2} TransId={3:x16}",
-              RELOAD_MessageCode.Attach_Request.ToString().PadRight(16, ' '),
-              nextHopNode, dest.ToString(), reloadSendMsg.TransactionID));
+          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO,
+            String.Format("Finger-{0} via {1} ==> Dest={2} TransId={3:x16}",
+            RELOAD_MessageCode.Attach_Request.ToString().PadRight(16, ' '),
+            nextHopNode, dest.ToString(), reloadSendMsg.TransactionID));
 
-            Arbiter.Activate(m_DispatcherQueue,
-              new IterativeTask<ReloadMessage, ReloadMessageFilter, int>(reloadSendMsg,
-              new ReloadMessageFilter(reloadSendMsg.TransactionID), RetransmissionTime,
-              reloadDialog.Execute));
-          }
-          catch (Exception e) {
-            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
-              String.Format("AttachFinger: " + e));
-          }
-          bool gotLoop = false;
+          Arbiter.Activate(m_DispatcherQueue,
+            new IterativeTask<ReloadMessage, ReloadMessageFilter, int>(reloadSendMsg,
+            new ReloadMessageFilter(reloadSendMsg.TransactionID), RetransmissionTime,
+            reloadDialog.Execute));
+        }
+        catch (Exception e) {
+          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
+            String.Format("AttachFinger: " + e));
+          attachNext.Post(true);
+          yield break;
+        }
+        bool gotLoop = false;
 
-          yield return Arbiter.Choice(
-            /* Success, Attached to finger */
-            Arbiter.Receive(false, reloadDialog.Done, done => { }),
-            /* Loop detected */
-            Arbiter.Receive(false, m_forwarding.LoopedTrans, transId => {
-              if (transId == reloadSendMsg.TransactionID) {
-                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING,
-                  String.Format("Not re-sending transaction: {0:x16}=> a loopback detected!",
-                  reloadSendMsg.TransactionID));
-                gotLoop = true;
-                m_forwarding.LoopedTrans = new Port<ulong>();
-              }
-            }));
+        yield return Arbiter.Choice(
+          /* Success, Attached to finger */
+          Arbiter.Receive(false, reloadDialog.Done, done => { }),
+          /* Loop detected */
+          Arbiter.Receive(false, m_forwarding.LoopedTrans, transId => {
+            if (transId == reloadSendMsg.TransactionID) {
+              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
+                String.Format("Not re-sending transaction: {0:x16}=> a loopback detected!",
+                reloadSendMsg.TransactionID));
+              gotLoop = true;
+              m_forwarding.LoopedTrans = new Port<ulong>();
+            }
+          }));
 
-          if (gotLoop) {
-            attachNext.Post(true);
-            yield break; ;
-          }
+        if (gotLoop) {
+          attachNext.Post(true);
+          yield break; ;
+        }
 
-          if (!reloadDialog.Error && reloadDialog.ReceivedMessage != null)
-            break;
+        if (!reloadDialog.Error && reloadDialog.ReceivedMessage != null)
+          break;
 
-          // If a response has not been received when the timer fires, the request
-          // is retransmitted with the same transaction identifier. 
+        // If a response has not been received when the timer fires, the request
+        // is retransmitted with the same transaction identifier. 
 
-          --iRetrans;
-          if (iRetrans >= 0) {
-            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING,
-              String.Format("Retrans {0} SendAttach  via {1} TransId={2:x16}",
-              iRetrans, nextHopNode, reloadSendMsg.TransactionID));
-            m_ReloadConfig.Statistics.IncRetransmission();
-          }
-          else {
-            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
-              String.Format("Failed! SendAttach  via {0} TransId={1:x16}",
-              nextHopNode, reloadSendMsg.TransactionID));
-            m_ReloadConfig.Statistics.IncTransmissionError();
-            if (dest.destination_data.node_id != null)
-              m_topology.routing_table.SetNodeState(dest.destination_data.node_id,
-                NodeState.unknown);
-          }
-       // }
+        --iRetrans;
+        if (iRetrans >= 0) {
+          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING,
+            String.Format("Retrans {0} SendAttach  via {1} TransId={2:x16}",
+            iRetrans, nextHopNode, reloadSendMsg.TransactionID));
+          m_ReloadConfig.Statistics.IncRetransmission();
+        }
+        else {
+          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
+            String.Format("Failed! SendAttach  via {0} TransId={1:x16}",
+            nextHopNode, reloadSendMsg.TransactionID));
+          m_ReloadConfig.Statistics.IncTransmissionError();
+          if (dest.destination_data.node_id != null)
+            m_topology.routing_table.SetNodeState(dest.destination_data.node_id,
+              NodeState.unknown);
+        }
+        // }
       }
 
       try {
@@ -957,7 +959,7 @@ namespace TSystems.RELOAD.Transport {
             }
             /* we know this peer, further Attaches will return same peer */
             else
-              attachNext.Post(false);            
+              attachNext.Post(false);
           }
         }
       }
@@ -982,7 +984,7 @@ namespace TSystems.RELOAD.Transport {
         m_ReloadConfig.StartStore = DateTime.Now;
 
       ReloadDialog reloadDialog = null;
-      ReloadMessage reloadSendMsg;            
+      ReloadMessage reloadSendMsg;
       ResourceId res_id = new ResourceId(ResourceName);
 
       m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_USAGE, String.Format("Store {0} as ResID: {1}", ResourceName, res_id));
@@ -998,7 +1000,7 @@ namespace TSystems.RELOAD.Transport {
             String.Format("Local storage at NodeId {0}", node.Id));
           m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_MEASURE,
             "Store:0,011111");
-          m_topology.Store(res_id, storeKindData);                              
+          m_topology.Store(res_id, storeKindData);
         }
         if (storeDone != null) storeDone.Post(reloadDialog);
         yield break;
@@ -1024,6 +1026,7 @@ namespace TSystems.RELOAD.Transport {
           storeDone.Post(reloadDialog);
           m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "Send Store: " + ex.Message);
           ReloadGlobals.PrintException(m_ReloadConfig, ex);
+          break;
         }
 
         yield return Arbiter.Receive(false, reloadDialog.Done, done => { });
@@ -1075,11 +1078,11 @@ namespace TSystems.RELOAD.Transport {
       }
 
       if (m_ReloadConfig.State == ReloadConfig.RELOAD_State.Shutdown)
-        m_machine.Finish();      
+        m_machine.Finish();
 
     }
 
-    #region Proprietary 
+    #region Proprietary
     // --josch
 
     /// <summary>
@@ -1100,7 +1103,7 @@ namespace TSystems.RELOAD.Transport {
       ResourceId res_id = new ResourceId(ResourceName);
       //List<StoreKindData> kind_data = new List<StoreKindData>();
 
-      
+
       Node node = null;
 
       if (viaGateWay != null) {
@@ -1122,14 +1125,14 @@ namespace TSystems.RELOAD.Transport {
           }
         }
 
-        Destination gateway = new Destination(new ResourceId(viaGateWay.Data));
+        Destination gateway = new Destination(new NodeId(viaGateWay.Data));
         Destination storeDestination = new Destination(res_id);
         StoreReq storeRequest = new StoreReq(storeDestination.destination_data.ressource_id,
                                               kind_data,
                                               m_machine.UsageManager);
         reloadSendMsg = create_reload_message(gateway, ++m_ReloadConfig.TransactionID, storeRequest);
         reloadSendMsg.forwarding_header.destination_list.Add(storeDestination);  //this is the real destination
-        
+
         if (reloadSendMsg.AddDestinationOverlay(ResourceName))
           m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "AddDestinationOverlay successful");
       }
@@ -1296,12 +1299,16 @@ namespace TSystems.RELOAD.Transport {
             var responses = new List<FetchKindResponse>();
             if (m_topology.Fetch(res_id, specifier, out fetchKindResponse)) {
               responses.Add(fetchKindResponse);
-              foreach (StoredData sd in fetchKindResponse.values)
-                recUsages.Add(sd.Value.GetUsageValue);
-              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO,
-                  String.Format("Fetch successful, got {0}",
-                      fetchKindResponse.values[0].Value.GetUsageValue.Report()));
-
+              foreach (StoredData sd in fetchKindResponse.values) {
+                if (m_ReloadConfig.AccessController.validateDataSignature(res_id, fetchKindResponse.kind, sd))
+                  recUsages.Add(sd.Value.GetUsageValue);
+                else {
+                  m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO, "DATA SIGNATURE INVALID!!");
+                }
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO,
+                    String.Format("Fetch successful, got {0}",
+                        sd.Value.GetUsageValue.Report()));
+              }
               m_ReloadConfig.ConnEstEnd = DateTime.Now;
             }
             OnFetchedData(res_id, responses);
@@ -1375,11 +1382,16 @@ namespace TSystems.RELOAD.Transport {
             if (answ != null) {
               fetchKindResponses = answ.KindResponses;
               foreach (FetchKindResponse kind in fetchKindResponses) {
-                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO,
-                  String.Format("Fetch successful, got {0}",
-                    kind.values[0].Value.GetUsageValue.Report()));
-                foreach (StoredData sd in kind.values)
-                  recUsages.Add(sd.Value.GetUsageValue);
+                foreach (StoredData sd in kind.values) {
+                  if (m_ReloadConfig.AccessController.validateDataSignature(res_id, kind.kind, sd))
+                    recUsages.Add(sd.Value.GetUsageValue);
+                  else {
+                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO, "DATA SIGNATURE INVALID!!");
+                  }
+                  m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO,
+                    String.Format("Fetch successful, got {0}",
+                      sd.Value.GetUsageValue.Report()));
+                }
               }
               OnFetchedData(res_id, fetchKindResponses);
               if (fetchDone != null) {
@@ -1412,8 +1424,7 @@ namespace TSystems.RELOAD.Transport {
     /// <param name="viaGateWay">Node Id of the GateWay into interconnection Overlay</param>
     /// <param name="overlayName">Name of the Overlay the other Peer is participating. Needed by the Gateway for further routing.</param>
     /// <returns></returns>
-    public IEnumerator<ITask> AppAttachProcedure(Destination dest, NodeId viaGateWay, string overlayName)
-    {
+    public IEnumerator<ITask> AppAttachProcedure(Destination dest, NodeId viaGateWay, string overlayName) {
       ReloadMessage reloadSendMsg;
       m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("AppAttachProcedure to {0} via GateWay {1}", dest, viaGateWay));
       reloadSendMsg = create_app_attach_req(new Destination(new NodeId(viaGateWay.Data)));
@@ -1729,7 +1740,7 @@ namespace TSystems.RELOAD.Transport {
       List<IUsage> recUsages = new List<IUsage>();
       ResourceId res_id = new ResourceId(resourceName);
 
-      m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_USAGE,
+      m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
           String.Format("Fetch {0} as ResID: {1}", resourceName, res_id));
 
       Node node = m_topology.routing_table.FindNextHopTo(new NodeId(res_id), true, false);
@@ -1750,12 +1761,16 @@ namespace TSystems.RELOAD.Transport {
           var responses = new List<FetchKindResponse>();
           if (m_topology.Fetch(res_id, specifier, out fetchKindResponse)) {
             responses.Add(fetchKindResponse);
-            foreach (StoredData sd in fetchKindResponse.values)
-              recUsages.Add(sd.Value.GetUsageValue);
-            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO,
-                String.Format("Fetch successful, got {0}",
-                    fetchKindResponse.values[0].Value.GetUsageValue.Report()));
-
+            foreach (StoredData sd in fetchKindResponse.values) {
+              if (m_ReloadConfig.AccessController.validateDataSignature(res_id, fetchKindResponse.kind, sd))
+                recUsages.Add(sd.Value.GetUsageValue);
+              else {
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "DATA SIGNATURE INVALID!!");
+              }
+              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO,
+                  String.Format("Fetch successful, got {0}",
+                      sd.Value.GetUsageValue.Report()));
+            }
             m_ReloadConfig.ConnEstEnd = DateTime.Now;
           }
           OnFetchedData(res_id, responses);
@@ -1775,7 +1790,7 @@ namespace TSystems.RELOAD.Transport {
         reloadSendMsg = create_fetch_req(new Destination(res_id), specifiers);
       }
 
-      int RetransmissionTime = ReloadGlobals.RetransmissionTime + 
+      int RetransmissionTime = ReloadGlobals.RetransmissionTime +
         ReloadGlobals.MaxTimeToSendPacket;
 
       int iRetrans = ReloadGlobals.MaxRetransmissions;
@@ -1785,7 +1800,7 @@ namespace TSystems.RELOAD.Transport {
         try {
           reloadDialog = new ReloadDialog(m_ReloadConfig, m_flm, node);
 
-          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_RELOAD,
+          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
             String.Format("{0} ==> {1} TransId={2:x16}",
               reloadSendMsg.reload_message_body.RELOAD_MsgCode.ToString().
               PadRight(16, ' '), node.Id, reloadSendMsg.TransactionID));
@@ -1828,11 +1843,16 @@ namespace TSystems.RELOAD.Transport {
             if (answ != null) {
               fetchKindResponses = answ.KindResponses;
               foreach (FetchKindResponse kind in fetchKindResponses) {
-                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO,
-                  String.Format("Fetch successful, got {0}",
-                    kind.values[0].Value.GetUsageValue.Report()));
-                foreach (StoredData sd in kind.values)
-                  recUsages.Add(sd.Value.GetUsageValue);                
+                foreach (StoredData sd in kind.values) {
+               //   if (m_ReloadConfig.AccessController.validateDataSignature(res_id, kind.kind, sd)) TODO:
+                    recUsages.Add(sd.Value.GetUsageValue);
+               //   else {
+              //      m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO, "DATA SIGNATURE INVALID!!");
+               //   }
+                  m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO,
+                    String.Format("Fetch successful, got {0}",
+                      sd.Value.GetUsageValue.Report()));
+                }
               }
               OnFetchedData(res_id, fetchKindResponses);
               if (fetchDone != null) {
@@ -1858,13 +1878,13 @@ namespace TSystems.RELOAD.Transport {
       }
     }
 
-    
+
     /// <summary>
     /// On data fetch execute the Usages AppProcedure
     /// </summary>
     /// <param name="res_id"></param>
     /// <param name="fetchKindResponse"></param>
-    private void OnFetchedData(ResourceId res_id, 
+    private void OnFetchedData(ResourceId res_id,
       List<FetchKindResponse> fetchKindResponses) {
       foreach (var fetchKindResponse in fetchKindResponses) {
         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_USAGE,
@@ -1895,7 +1915,7 @@ namespace TSystems.RELOAD.Transport {
       reloadSendMsg = create_update_req(dest, m_topology.routing_table,
         ChordUpdateType.neighbors);
 
-      int RetransmissionTime = ReloadGlobals.RetransmissionTime + 
+      int RetransmissionTime = ReloadGlobals.RetransmissionTime +
          ReloadGlobals.MaxTimeToSendPacket;
       int iRetrans = ReloadGlobals.MaxRetransmissions;
 
@@ -1958,7 +1978,7 @@ namespace TSystems.RELOAD.Transport {
             if (answ != null) {
               NodeId originator = reloadRcvMsg.OriginatorID;
 
-              if (m_topology.routing_table.FingerSuccessors.Contains(originator)) {                
+              if (m_topology.routing_table.FingerSuccessors.Contains(originator)) {
                 //m_topology.routing_table.GetNode(originator).Successors = answ.Successors;
                 //m_topology.routing_table.GetNode(originator).Predecessors = answ.Predecessors;
                 m_topology.routing_table.SetFingerState(originator,
@@ -1977,7 +1997,7 @@ namespace TSystems.RELOAD.Transport {
       catch (Exception ex) {
         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
           "Send Update: " + ex.Message);
-      }      
+      }
     }
 
     public void InboundClose(NodeId nodeid) {
@@ -2016,18 +2036,18 @@ namespace TSystems.RELOAD.Transport {
     }
 
     public IEnumerator<ITask> Send(ReloadMessage reloadSendMsg, Node NextHopNode) {
-      if (reloadSendMsg.reload_message_body.RELOAD_MsgCode == 
+      if (reloadSendMsg.reload_message_body.RELOAD_MsgCode ==
         RELOAD_MessageCode.Error)
-        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, 
+        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
           String.Format("{0} ==> {1} code={2}: msg=\"{3}\", dest={4}",
-          reloadSendMsg.reload_message_body.RELOAD_MsgCode.ToString().PadRight(16, ' '), 
+          reloadSendMsg.reload_message_body.RELOAD_MsgCode.ToString().PadRight(16, ' '),
           NextHopNode, ((ErrorResponse)reloadSendMsg.reload_message_body).ErrorCode,
           ((ErrorResponse)reloadSendMsg.reload_message_body).ErrorMsg,
           reloadSendMsg.forwarding_header.destination_list[0]));
-      try {        
+      try {
         //GetForwardingAndLinkManagementLayer().Send(NextHopNode, reloadSendMsg);
         Arbiter.Activate(m_DispatcherQueue, new IterativeTask<Node, ReloadMessage>(NextHopNode, reloadSendMsg, GetForwardingAndLinkManagementLayer().Send));
-      }      
+      }
       catch (Exception ex) {
         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
           "SendAnswer: " + ex.Message);
@@ -2037,14 +2057,14 @@ namespace TSystems.RELOAD.Transport {
 
     public Boolean CheckAndSetAdmittingPeer(Node node) {
       if (!m_ReloadConfig.IsBootstrap)
-        if ((m_ReloadConfig.AdmittingPeer == null     ||
+        if ((m_ReloadConfig.AdmittingPeer == null ||
              node.Id.ElementOfInterval(m_topology.Id,
-             m_ReloadConfig.AdmittingPeer.Id, true))  &&
-             !(m_ReloadConfig.AdmittingPeer != null   && 
+             m_ReloadConfig.AdmittingPeer.Id, true)) &&
+             !(m_ReloadConfig.AdmittingPeer != null &&
              m_ReloadConfig.AdmittingPeer.Id == node.Id)) {
           m_ReloadConfig.AdmittingPeer = node;
           m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_RELOAD,
-            String.Format("AttachProcedure: Successfully attached to new"+
+            String.Format("AttachProcedure: Successfully attached to new" +
               "admitting peer {0}", m_ReloadConfig.AdmittingPeer.Id));
           return true;
         }
@@ -2057,10 +2077,10 @@ namespace TSystems.RELOAD.Transport {
       NodeId OriginatorID = recmsg.OriginatorID;
 
       if (req_answ != null && req_answ.ice_candidates != null) {
-        Node attacher = new Node(recmsg.OriginatorID, req_answ.ice_candidates);        
+        Node attacher = new Node(recmsg.OriginatorID, req_answ.ice_candidates);
         bool isFinger = m_topology.routing_table.isFinger(attacher.Id);
 
-        m_topology.routing_table.AddNode(attacher);       
+        m_topology.routing_table.AddNode(attacher);
         m_topology.routing_table.SetNodeState(recmsg.OriginatorID, NodeState.attached);
 
         if (recmsg.IsRequest()) {
@@ -2072,24 +2092,11 @@ namespace TSystems.RELOAD.Transport {
           ReloadMessage sendmsg = create_attach_answ(
             new Destination(OriginatorID), recmsg.TransactionID);
           recmsg.PutViaListToDestination(sendmsg);
-          sendmsg.addOverlayForwardingOptions(recmsg);  //Proprietary  //--Joscha	
-          if (m_machine is GWMachine) { //TODO: think about and write comment
-            if (sendmsg.forwarding_header.fw_options != null) { //handle proprietary forwarding options destination_overlay and source_overlay --joscha
-              string destination_overlay = null;
-              string source_overlay = null;
-
-              foreach (ForwardingOption option in sendmsg.forwarding_header.fw_options) {
-                if (option.fwo_type == ForwardingOptionsType.destinationOverlay) {
-                  destination_overlay = System.Text.Encoding.Unicode.GetString(option.bytes);
-                }
-                if (option.fwo_type == ForwardingOptionsType.sourceOverlay) {
-                  source_overlay = System.Text.Encoding.Unicode.GetString(option.bytes);
-                }
-              }
-              if (destination_overlay != null && source_overlay != null)
-                ((GWMachine)m_machine).GateWay.Send(source_overlay, destination_overlay, sendmsg);
-              else
-                send(sendmsg, m_topology.routing_table.GetNode(recmsg.LastHopNodeId));
+          //sendmsg.addOverlayForwardingOptions(recmsg);  //Proprietary  //--Joscha	
+          if (m_machine is GWMachine) { //workaround in case date is stored at the gateway node responsible to route the message back into the interconnectionoverlay 
+            if (sendmsg.forwarding_header.destination_list[0].destination_data.node_id == ((GWMachine)m_machine).GateWay.interDomainPeer.Topology.LocalNode.Id) {
+              sendmsg.reload_message_body.RELOAD_MsgCode = RELOAD_MessageCode.Fetch_Answer;
+              ((GWMachine)m_machine).GateWay.interDomainPeer.Transport.receive_message(sendmsg);
             }
             else
               send(sendmsg, m_topology.routing_table.GetNode(recmsg.LastHopNodeId));
@@ -2136,15 +2143,15 @@ namespace TSystems.RELOAD.Transport {
           }
         }
       }
-       
-      if (source_overlay == null)// --joscha Do not establish a connection to a different overlay    
+
+      if (destination_overlay == null)// --joscha Do not establish a connection to a different overlay    
         if (CheckAndSetAdmittingPeer(Originator) && Originator.Id != recmsg.LastHopNodeId)
           // Send ping to establish a physical connection
           Arbiter.Activate(m_DispatcherQueue,
             new IterativeTask<Destination, PingOption>(new Destination(Originator.Id),
             PingOption.direct, SendPing));
       if (source_overlay == m_ReloadConfig.OverlayName) {
-      
+
         // Send ping to establish a physical connection
         Arbiter.Activate(m_DispatcherQueue,
           new IterativeTask<Destination, PingOption>(new Destination(Originator.Id),
@@ -2160,7 +2167,7 @@ namespace TSystems.RELOAD.Transport {
           ReloadMessage sendmsg = create_app_attach_answ(
             new Destination(OriginatorID), recmsg.TransactionID);
           recmsg.PutViaListToDestination(sendmsg);
-          sendmsg.addOverlayForwardingOptions(recmsg);  //--joscha
+          //sendmsg.addOverlayForwardingOptions(recmsg);  //--joscha
           send(sendmsg, m_topology.routing_table.GetNode(recmsg.LastHopNodeId));
         }
         else {
@@ -2219,14 +2226,14 @@ namespace TSystems.RELOAD.Transport {
 
         recmsg.PutViaListToDestination(sendmsg);
         send(sendmsg, m_topology.routing_table.GetNode(recmsg.LastHopNodeId));
-        NodeId originator = recmsg.OriginatorID;                  
-        m_topology.routing_table.SetNodeState(originator,
+        //NodeId originator = recmsg.OriginatorID;
+        m_topology.routing_table.SetNodeState(OriginatorID,
           NodeState.updates_received);
-        m_topology.routing_table.SetFingerState(originator,
+        m_topology.routing_table.SetFingerState(OriginatorID,
           NodeState.updates_received);
         if (req_answ.Successors.Count > 0) {
-          m_topology.routing_table.GetNode(recmsg.OriginatorID).Successors = req_answ.Successors;
-          m_topology.routing_table.GetNode(recmsg.OriginatorID).Predecessors = req_answ.Predecessors;
+          m_topology.routing_table.GetNode(OriginatorID).Successors = req_answ.Successors;
+          m_topology.routing_table.GetNode(OriginatorID).Predecessors = req_answ.Predecessors;
         }
 
         if (m_ReloadConfig.State == ReloadConfig.RELOAD_State.Joining) {
@@ -2239,7 +2246,7 @@ namespace TSystems.RELOAD.Transport {
               m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_RELOAD,
                 String.Format("Joining completed"));
               m_ReloadConfig.LastJoinedTime = DateTime.Now;
-              force_send_update = true;              
+              force_send_update = true;
             }
           }
         }
@@ -2293,32 +2300,20 @@ namespace TSystems.RELOAD.Transport {
           new Destination(originatorID), recmsg.TransactionID, recStoreKindData,
           replicaNodes);
         recmsg.PutViaListToDestination(storeAnswer);
-        storeAnswer.addOverlayForwardingOptions(recmsg);  //Proprietary  //--Joscha	
+        //storeAnswer.addOverlayForwardingOptions(recmsg);  //Proprietary  //--Joscha	
 
         Node nextHop = m_topology.routing_table.GetNode(recmsg.LastHopNodeId);
-        if (m_machine is GWMachine) { //TODO: think about and write comment
-          if (storeAnswer.forwarding_header.fw_options != null) { //handle proprietary forwarding options destination_overlay and source_overlay --joscha
-            string destination_overlay = null;
-            string source_overlay = null;
-
-            foreach (ForwardingOption option in storeAnswer.forwarding_header.fw_options) {
-              if (option.fwo_type == ForwardingOptionsType.destinationOverlay) {
-                destination_overlay = System.Text.Encoding.Unicode.GetString(option.bytes);
-              }
-              if (option.fwo_type == ForwardingOptionsType.sourceOverlay) {
-                source_overlay = System.Text.Encoding.Unicode.GetString(option.bytes);
-              }
-            }
-            if (destination_overlay != null && source_overlay != null)
-              ((GWMachine)m_machine).GateWay.Send(source_overlay, destination_overlay, storeAnswer);
-            else
-              send(storeAnswer, nextHop);
+        if (m_machine is GWMachine) { //workaround in case date is stored at the gateway node responsible to route the message back into the interconnectionoverlay 
+          if (storeAnswer.forwarding_header.destination_list[0].destination_data.node_id == ((GWMachine)m_machine).GateWay.interDomainPeer.Topology.LocalNode.Id) {
+            storeAnswer.reload_message_body.RELOAD_MsgCode = RELOAD_MessageCode.Fetch_Answer;
+            ((GWMachine)m_machine).GateWay.interDomainPeer.Transport.receive_message(storeAnswer);
           }
           else
             send(storeAnswer, nextHop);
         }
         else
           send(storeAnswer, nextHop);
+
 #if false
                 if (storeRequest.Replica_number < 2) {
                     ReloadMessage storeReplica1, storeReplica2;
@@ -2367,7 +2362,7 @@ namespace TSystems.RELOAD.Transport {
 
         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_RELOAD,
           String.Format("{0} ==> {1} TransId={2:x16}",
-            RELOAD_MessageCode.Fetch_Answer.ToString().PadRight(16, ' '), 
+            RELOAD_MessageCode.Fetch_Answer.ToString().PadRight(16, ' '),
               originatorId, recmsg.TransactionID));
 
         var fetchKindResponses = new List<FetchKindResponse>();
@@ -2390,26 +2385,12 @@ namespace TSystems.RELOAD.Transport {
 
         sendmsg = create_fetch_answ(new Destination(originatorId), recmsg.TransactionID, fetchKindResponses);
         recmsg.PutViaListToDestination(sendmsg);
-        sendmsg.addOverlayForwardingOptions(recmsg);  //Proprietary  //--Joscha	
+        //sendmsg.addOverlayForwardingOptions(recmsg);  //Proprietary  //--Joscha	
 
-        if (m_machine is GWMachine) { //TODO: think about and write comment
-          if (sendmsg.forwarding_header.fw_options != null) { //handle proprietary forwarding options destination_overlay and source_overlay --joscha
-            string destination_overlay = null;
-            string source_overlay = null;
-
-            foreach (ForwardingOption option in sendmsg.forwarding_header.fw_options) {
-              if (option.fwo_type == ForwardingOptionsType.destinationOverlay) {
-                destination_overlay = System.Text.Encoding.Unicode.GetString(option.bytes);
-              }
-              if (option.fwo_type == ForwardingOptionsType.sourceOverlay) {
-                source_overlay = System.Text.Encoding.Unicode.GetString(option.bytes);
-              }
-            }
-            if (destination_overlay != null && source_overlay != null)
-            //if (destination_overlay != null && source_overlay != null && sendmsg.forwarding_header.destination_list[0].destination_data.node_id == ((GWMachine)m_machine).GateWay.mainPeer.Topology.LocalNode.Id)
-              ((GWMachine)m_machine).GateWay.Send(source_overlay, destination_overlay, sendmsg);
-            else
-              send(sendmsg, m_topology.routing_table.GetNode(recmsg.LastHopNodeId));
+        if (m_machine is GWMachine) { //workaround in case date is stored at the gateway node responsible to route the message back into the interconnectionoverlay 
+          if (sendmsg.forwarding_header.destination_list[0].destination_data.node_id == ((GWMachine)m_machine).GateWay.interDomainPeer.Topology.LocalNode.Id) {
+            sendmsg.reload_message_body.RELOAD_MsgCode = RELOAD_MessageCode.Fetch_Answer;
+            ((GWMachine)m_machine).GateWay.interDomainPeer.Inject(sendmsg); //TODO: change other cases
           }
           else
             send(sendmsg, m_topology.routing_table.GetNode(recmsg.LastHopNodeId));
@@ -2438,7 +2419,7 @@ namespace TSystems.RELOAD.Transport {
         }
          */
 
-        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_RELOAD, 
+        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_RELOAD,
           String.Format("{0} ==> {1} TransId={2:x16}",
           RELOAD_MessageCode.Ping_Answer.ToString().PadRight(16, ' '),
           originatorID, recmsg.TransactionID));
@@ -2480,104 +2461,28 @@ namespace TSystems.RELOAD.Transport {
         }
 
         if (reloadMsg.IsFragmented() && reloadMsg.IsSingleFragmentMessage() == false) {  // -- joscha
-          ReloadMessage reassembledMsg = reloadMsg.ReceiveFragmentedMessage(ref fragmentedMessageBuffer);
+          ReloadMessage reassembledMsg = null;
+          lock (fragmentedMessageBuffer) {
+            reassembledMsg = reloadMsg.ReceiveFragmentedMessage(ref fragmentedMessageBuffer);
+          }
           if (reassembledMsg == null) //not yet all fragments received => not reassembled
             return;
           else
             reloadMsg = reassembledMsg; //message reassembled => continue as usual
         }
 
-        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("!!! receive_message: !!! {0}", Enum.GetName(typeof(RELOAD_MessageCode), reloadMsg.reload_message_body.RELOAD_MsgCode)));
+        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("!!! receive_message: !!! {0} from {1}", Enum.GetName(typeof(RELOAD_MessageCode), reloadMsg.reload_message_body.RELOAD_MsgCode), reloadMsg.OriginatorID));
 
-        if (reloadMsg.forwarding_header.fw_options != null) { //handle proprietary forwarding options destination_overlay and source_overlay --joscha
-          string destination_overlay = null;
-          string source_overlay = null;
-          //---------------DEBUG
-          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format(" reloadMsg.forwarding_header.fw_options != null via_list"));
-          if (reloadMsg.forwarding_header.via_list != null) {
-            foreach (Destination destx in reloadMsg.forwarding_header.via_list)
-              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Via={0} ", destx.ToString()));
-          }
-          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format(" reloadMsg.forwarding_header.fw_options != null destination_list"));
-          if (reloadMsg.forwarding_header.destination_list != null) {
-            foreach (Destination desty in reloadMsg.forwarding_header.destination_list)
-                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Dest={0} ", desty.ToString()));
-          }
-          //---------------DEBUG
-          foreach (ForwardingOption option in reloadMsg.forwarding_header.fw_options) {
-            if (option.fwo_type == ForwardingOptionsType.destinationOverlay) {
-              destination_overlay = System.Text.Encoding.Unicode.GetString(option.bytes);
-            }
-            if (option.fwo_type == ForwardingOptionsType.sourceOverlay) {
-              source_overlay = System.Text.Encoding.Unicode.GetString(option.bytes);
-            }
-          }
-          if (source_overlay != null && destination_overlay != null) {
-            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format(m_machine.ReloadConfig.OverlayName + ": " + "Message from sourceOverlay: " + source_overlay + " for destinationOverlay: " + destination_overlay));
-
-            if (m_machine is GWMachine) {
-              GWMachine gw = (GWMachine)m_machine;
-              //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("Message has reached the GatewayPeer " + m_machine.ReloadConfig.OverlayName));
-              if (m_machine.ReloadConfig.OverlayName == destination_overlay) {
-                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("forwarded Message is in destination_overlay " + destination_overlay));
-              }
-                //              else if (gw.GateWay.mainPeer.ReloadConfig.OverlayName == destination_overlay) {
-                //if (reloadMsg.forwarding_header.destination_list[0].type == DestinationType.node &&
-                //   reloadMsg.forwarding_header.destination_list[0].destination_data.node_id == gw.GateWay.intraDomainPeer.Topology.LocalNode.Id) {
-                //  gw.GateWay.intraDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("Message received by GateWayPeer"));
-                //  gw.GateWay.Receive(source_overlay, reloadMsg);
-                //  return;
-                //}
-                //else {
-                //  //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("Message is forwarded within interdomain Overlay"));
-                //  gw.GateWay.intraDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("Message received by WRONG GateWayPeer but i can handle it so i remove the correct GW Peer from destination list")); //TODO: find better solution
-                //  reloadMsg.RemoveFirstDestEntry();
-                //  gw.GateWay.Receive(source_overlay, reloadMsg);
-                //  return;
-                //}
-
-              else if (gw.GateWay.mainPeer.ReloadConfig.OverlayName == destination_overlay) {
-                gw.GateWay.intraDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("Message received by GateWayPeer"));
-                gw.GateWay.Receive(source_overlay, reloadMsg);
-                return;
-              }
-              else if (m_machine.ReloadConfig.OverlayName != destination_overlay) {
-                //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("Message: source_overlay " + source_overlay + " destination_overlay " + destination_overlay));
-                gw.GateWay.Send(source_overlay, destination_overlay, reloadMsg);
-                return;
-              }
-              else
-                return;
-            }
-            else if (m_machine.ReloadConfig.OverlayName == destination_overlay) { //TODO:
-              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("forwarded Message is in destination_overlay " + destination_overlay));
-            }
-            else if (m_machine.ReloadConfig.OverlayName == source_overlay) {
-              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("Message with forwarding options needs to be forwarded to GateWay Peer. destination_overlay is" + destination_overlay));
-              //---------------DEBUG
-              if (reloadMsg.forwarding_header.via_list != null) {
-                foreach (Destination destx in reloadMsg.forwarding_header.via_list)
-                  m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Via={0} ", destx.ToString()));
-              }
-              if (reloadMsg.forwarding_header.destination_list != null) {
-                foreach (Destination desty in reloadMsg.forwarding_header.destination_list)
-                  m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Dest={0} ", desty.ToString()));
-              }
-              //---------------DEBUG
-              //return;
-            }
-            else
-              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("Message is forwarded within interdomain Overlay"));
-          }
-        }
-        
         //is this a request to be forwarded?
         if (!m_forwarding.ProcessMsg(reloadMsg)) {
           /* First of all, validate message */
           if (!m_ReloadConfig.AccessController.RequestPermitted(reloadMsg)) {
             m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
-              "Transport.receive_message(): Request originator cannot be validated!");
+              "Transport.receive_message(): " + reloadMsg.reload_message_body.RELOAD_MsgCode.ToString() + " Request originator cannot be validated!");
           }
+          else
+            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
+              "Transport.receive_message(): " + reloadMsg.reload_message_body.RELOAD_MsgCode.ToString() + " Message signature verified and certificate authenticated!");
           /* handle only incoming RELOAD requests here...,
            * all answers will be handled in the appropriate tasks
            */
@@ -2687,8 +2592,8 @@ namespace TSystems.RELOAD.Transport {
 
     private ReloadMessage create_reload_message(Destination destination,
       UInt64 trans_id, RELOAD_MessageBody reload_content) {
-      return create_reload_message(new ReloadMessage(m_ReloadConfig,
-        m_topology.LocalNode.Id, destination, trans_id, reload_content));
+      return new ReloadMessage(m_ReloadConfig,
+        m_topology.LocalNode.Id, destination, trans_id, reload_content);
     }
 
     public ReloadMessage create_reload_message(ReloadMessage reloadRequest) {
@@ -2710,18 +2615,17 @@ namespace TSystems.RELOAD.Transport {
     /// <returns></returns>
     public ReloadMessage create_attach_req(Destination destination,
       Boolean fForceSendUpdate) {
-      return create_reload_message(new ReloadMessage(m_ReloadConfig,
-        m_topology.LocalNode.Id, destination, ++m_ReloadConfig.TransactionID,
-          new AttachReqAns(m_topology.LocalNode, true, fForceSendUpdate)));
+      return create_reload_message(destination, ++m_ReloadConfig.TransactionID,
+          new AttachReqAns(m_topology.LocalNode, true, fForceSendUpdate));
     }
 
     public ReloadMessage create_app_attach_req(Destination destination) {
-      return create_reload_message(new ReloadMessage(m_ReloadConfig, m_topology.LocalNode.Id, destination, ++m_ReloadConfig.TransactionID, new AppAttachReqAns(m_topology.LocalNode, true)));
+      return create_reload_message(destination, ++m_ReloadConfig.TransactionID, new AppAttachReqAns(m_topology.LocalNode, true));
     }
 
     public ReloadMessage create_attach_answ(Destination destination, UInt64 trans_id) {
       //return create_reload_message(destination, trans_id, new AttachReqAns(m_topology.LocalNode, false, true));
-      return create_reload_message(destination, trans_id, 
+      return create_reload_message(destination, trans_id,
         new AttachReqAns(m_topology.LocalNode, false, false));
     }
 
@@ -2823,7 +2727,7 @@ namespace TSystems.RELOAD.Transport {
     internal void send(ReloadMessage reloadMsg, Node NextHopNode) {
       if (NextHopNode == null || NextHopNode.Id == null)
         throw new System.Exception("Node == null on send");
-
+      m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("!!! send: !!! {0} to {1}", Enum.GetName(typeof(RELOAD_MessageCode), reloadMsg.reload_message_body.RELOAD_MsgCode), reloadMsg.forwarding_header.destination_list[0]));
       if (m_ReloadConfig.State < ReloadConfig.RELOAD_State.Exit)
         Arbiter.Activate(m_DispatcherQueue,
           new IterativeTask<ReloadMessage, Node>(reloadMsg, NextHopNode, Send));

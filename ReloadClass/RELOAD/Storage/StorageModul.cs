@@ -14,6 +14,14 @@ namespace TSystems.RELOAD.Storage {
     Dictionary<string, Resource> resources;
     ReloadConfig s_ReloadConfig;
 
+
+
+    public delegate void DResourceStored(ResourceId resId, StoreKindData kindData);
+    /// <summary>
+    /// Fires if an Resource has been stored
+    /// </summary>
+    public event DResourceStored ResourceStored;
+
     public StorageModul(ReloadConfig config) {
       s_ReloadConfig = config;
       resources = new Dictionary<string, Resource>();
@@ -21,12 +29,15 @@ namespace TSystems.RELOAD.Storage {
 
     public void Store(ResourceId resId, StoreKindData kindData) {
       string resourceId = resId.ToString();
-      if (!resources.ContainsKey(resourceId)) {
-        resources.Add(resourceId, new Resource(resId, s_ReloadConfig));
-      }
-      Resource resource = resources[resourceId];
-      foreach (StoredData storedData in kindData.Values) {
-        resource.AddStoredData(kindData.Kind, storedData, kindData.Generation_counter);
+      lock (resources) {
+        if (!resources.ContainsKey(resourceId)) {
+          resources.Add(resourceId, new Resource(resId, s_ReloadConfig));
+        }
+        Resource resource = resources[resourceId];
+        foreach (StoredData storedData in kindData.Values) {
+          resource.AddStoredData(kindData.Kind, storedData, kindData.Generation_counter);
+        }
+       ResourceStored(resId, kindData);
       }
     }
 
@@ -41,16 +52,18 @@ namespace TSystems.RELOAD.Storage {
       out FetchKindResponse fetchKindResponse) {
 
       string resouceId = resId.ToString();
-      if (!resources.ContainsKey(resouceId)) {
-        fetchKindResponse = new FetchKindResponse();
-        return false;
-      }
-      Resource resource = resources[resouceId];
-      List<StoredData> machtes = resource.StoredData(specifier);
-      if (machtes != null && machtes.Count >= 0) {
-        fetchKindResponse = new FetchKindResponse(
-          specifier.kindId, resource.GetGeneration(specifier.kindId), machtes);
-        return true;
+      lock (resources) {
+        if (!resources.ContainsKey(resouceId)) {
+          fetchKindResponse = new FetchKindResponse();
+          return false;
+        }
+        Resource resource = resources[resouceId];
+        List<StoredData> machtes = resource.StoredData(specifier);
+        if (machtes != null && machtes.Count >= 0) {
+          fetchKindResponse = new FetchKindResponse(
+            specifier.kindId, resource.GetGeneration(specifier.kindId), machtes);
+          return true;
+        }
       }
       fetchKindResponse = new FetchKindResponse();
       return false;

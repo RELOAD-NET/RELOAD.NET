@@ -56,7 +56,7 @@ namespace TSystems.RELOAD.Topology {
     /// <param name="data">The StoredData</param>
     /// <returns>True, if ACP applies</returns>
     Boolean ValuePermitted(ResourceId resId, UInt32 kindId, StoredData data);
-  }  
+  }
 
   public interface IAccessController {
 
@@ -90,7 +90,7 @@ namespace TSystems.RELOAD.Topology {
     /// Stores a list of X.509 certificates.
     /// </summary>
     /// <param name="pkcs">Lisf of X.509 PKCs as opaque strings</param>
-    void SetPKCs(Dictionary<String,GenericCertificate> pkcs);
+    void SetPKCs(Dictionary<String, GenericCertificate> pkcs);
 
     /// <summary>
     /// Parses the config document for access control codes and
@@ -118,6 +118,17 @@ namespace TSystems.RELOAD.Topology {
     /// <param name="msg">The request to be checked</param>
     /// <returns>True, if the originator is validated</returns>
     Boolean RequestPermitted(ReloadMessage msg);
+
+    /// <summary>
+    /// Validates a StoredData using the PKCs. RequestPermitted
+    /// should be called first to set the PKCs
+    /// </summary>
+    /// <param name="resId">The resId of the Request</param>
+    /// <param name="kind">The kind of the Response</param>
+    /// <param name="sd">StoredData to verify</param>
+    /// <returns>True, if the signature is validated</returns>
+    Boolean validateDataSignature(ResourceId resId, uint kind, StoredData sd);
+
   }
 
   public class AccessController : IAccessController {
@@ -125,20 +136,20 @@ namespace TSystems.RELOAD.Topology {
     #region Private members
 
     /* key = hash over PKC, value = PKC */
-    private Dictionary<String, GenericCertificate> storedPKCs;    
+    private Dictionary<String, GenericCertificate> storedPKCs;
     /* The configuration of this stack */
     ReloadConfig m_ReloadConfig;
     /* The registered access control policies 
      * key = ACP name, value = ACP
      */
-    Dictionary<String ,IAccessControlPolicy> ACPs;
+    Dictionary<String, IAccessControlPolicy> ACPs;
     /* Maps the relation from kind-id to ACP
      * key = kind-id, value = name of ACP
      */
     Dictionary<UInt32, String> ACPmap;
 
     #endregion
-    
+
     private SignerIdentity myIdentity;
     /// <summary>
     ///  The signer identity of this peer/client
@@ -148,24 +159,24 @@ namespace TSystems.RELOAD.Topology {
     }
 
     public AccessController(ReloadConfig rc) {
-        var ascii = new ASCIIEncoding();
-        m_ReloadConfig = rc;
-        storedPKCs = new Dictionary<string, GenericCertificate>();
-        ACPs = new Dictionary<String, IAccessControlPolicy>();
-        ACPmap = new Dictionary<UInt32, String>();
-        /* Convert My TEIX509Certificate to opaque string*/
-        byte[] certBinary = null;
-        m_ReloadConfig.MyCertificate.SaveToBufferPEM(out certBinary, "");
-        string myCert = ascii.GetString(certBinary);
-        /* SignerIdValue*/
-        var sha256 = new SHA256Managed();
-        byte[] hash = sha256.ComputeHash(ascii.GetBytes(myCert));
-        var signIdVal = new SignerIdentityValue(SignerIdentityType.cert_hash,
-          ReloadGlobals.HashAlg, ascii.GetString(hash));
-        /* Publish my Id and my PKC */
-        var myGenCert = new GenericCertificate(myCert);
-        myIdentity = new SignerIdentity(SignerIdentityType.cert_hash, signIdVal);
-        storedPKCs.Add(ascii.GetString(hash), myGenCert);
+      var ascii = new ASCIIEncoding();
+      m_ReloadConfig = rc;
+      storedPKCs = new Dictionary<string, GenericCertificate>();
+      ACPs = new Dictionary<String, IAccessControlPolicy>();
+      ACPmap = new Dictionary<UInt32, String>();
+      /* Convert My TEIX509Certificate to opaque string*/
+      byte[] certBinary = null;
+      m_ReloadConfig.MyCertificate.SaveToBufferPEM(out certBinary, "");
+      string myCert = ascii.GetString(certBinary);
+      /* SignerIdValue*/
+      var sha256 = new SHA256Managed();
+      byte[] hash = sha256.ComputeHash(ascii.GetBytes(myCert));
+      var signIdVal = new SignerIdentityValue(SignerIdentityType.cert_hash,
+        ReloadGlobals.HashAlg, ascii.GetString(hash));
+      /* Publish my Id and my PKC */
+      var myGenCert = new GenericCertificate(myCert);
+      myIdentity = new SignerIdentity(SignerIdentityType.cert_hash, signIdVal);
+      storedPKCs.Add(ascii.GetString(hash), myGenCert);
     }
 
     private bool validateCertHash(ReloadMessage msg,
@@ -189,7 +200,7 @@ namespace TSystems.RELOAD.Topology {
         overlay, transId, msgBoby, identity);
 
       byte[] signatureInput = ascii.GetBytes(strSignaturInput);
-      
+
       byte[] sigVal = msg.security_block.Signature.SignaureValue;
       signerCert.Validate();
       var cryptoProvider = new TElRSAPublicKeyCrypto();
@@ -222,9 +233,12 @@ namespace TSystems.RELOAD.Topology {
         msg.security_block.Signature.SignaureValue);
       try {
         var res = cryptoProvider.VerifyDetached(msInput, msSignature, 0, 0);
-        return true;
+        if (res == TSBPublicKeyVerificationResult.pkvrSuccess)
+          return true;
+        else
+          return false;
       }
-      catch(Exception e){
+      catch (Exception e) {
         var err = e.Message;
         return false;
       }
@@ -267,15 +281,15 @@ namespace TSystems.RELOAD.Topology {
       kindblock[] reqKinds = config.requiredkinds;
       foreach (kindblock reqKind in reqKinds) {
         string acp = reqKind.kind.accesscontrol;
-        if(reqKind.kind.name != null){
+        if (reqKind.kind.name != null) {
           /* TODO should be handled by an XML or something else */
-          switch(reqKind.kind.name) {
+          switch (reqKind.kind.name) {
             case "SIP-REGISTRATION":
               ACPmap.Add(12, reqKind.kind.accesscontrol.ToUpper());
               break;
             case "DISCO-REGISTRATION":
-            ACPmap.Add(16, reqKind.kind.accesscontrol.ToUpper());
-            break;
+              ACPmap.Add(16, reqKind.kind.accesscontrol.ToUpper());
+              break;
             case "ACCESS-CONTROL-LIST":
               ACPmap.Add(17, reqKind.kind.accesscontrol.ToUpper());
               break;
@@ -287,8 +301,8 @@ namespace TSystems.RELOAD.Topology {
         else {
           UInt32 kindId = reqKind.kind.id;
           ACPmap.Add(kindId, reqKind.kind.accesscontrol.ToUpper());
-        }        
-      }      
+        }
+      }
     }
 
     public void RegisterPolicy(IAccessControlPolicy acp) {
@@ -299,7 +313,7 @@ namespace TSystems.RELOAD.Topology {
     }
 
     public IAccessControlPolicy GetACP(uint kindId) {
-      
+
       return ACPs[ACPmap[kindId]];
     }
 
@@ -308,8 +322,8 @@ namespace TSystems.RELOAD.Topology {
     /// </summary>
     /// <param name="msg"></param>
     /// <returns></returns>
-    public bool RequestPermitted(ReloadMessage msg) {        
-      var ascii = new ASCIIEncoding();      
+    public bool RequestPermitted(ReloadMessage msg) {
+      var ascii = new ASCIIEncoding();
       /* Obtain security parameter */
       SecurityBlock security_block = msg.security_block;
       var signId = security_block.Signature.Identity;
@@ -318,12 +332,12 @@ namespace TSystems.RELOAD.Topology {
       /* Dictionary over all certs carried in msg */
       var certs = new Dictionary<string, GenericCertificate>();
       var sha256 = new SHA256Managed();
-      
-      /* Store all certificates */      
+
+      /* Store all certificates */
       foreach (GenericCertificate pkc in security_block.Certificates) {
         byte[] bHash = sha256.ComputeHash(ascii.GetBytes(pkc.Certificate));
         string strHash = Encoding.ASCII.GetString(bHash, 0, bHash.Length);
-        certs.Add(strHash, pkc );
+        certs.Add(strHash, pkc);
       }
       SetPKCs(certs);
       string strCert = certs[signId.Identity.CertificateHash].Certificate;
@@ -336,10 +350,10 @@ namespace TSystems.RELOAD.Topology {
           security_block.OriginatorNodeID, cert.IssuerName.CommonName));
         return false;
       }
-      /* Validate Signature */        
+      /* Validate Signature */
       switch (signId.IdentityType) {
         case SignerIdentityType.cert_hash:
-          return validateCertHash(msg, cert);          
+          return validateCertHash(msg, cert);
         case SignerIdentityType.cert_hash_node_id:
           // TODO
           throw new NotImplementedException(
@@ -351,12 +365,119 @@ namespace TSystems.RELOAD.Topology {
           throw new NotSupportedException(String.Format(
             "ReloadMsg: The signer identity type {0} is not supported",
             signId.IdentityType));
-      }            
+      }
 
       return false;
     }
 
+    public bool validateDataSignature(ResourceId resId, uint kind, StoredData sd) {
+      //FetchAns fetch_answer = (FetchAns)(reloadMsg.reload_message_body);
+
+        var ascii = new ASCIIEncoding();
+        /* Set alogorithm and identity */
+        SignatureAndHashAlgorithm algorithm = new SignatureAndHashAlgorithm(HashAlgorithm.sha256,
+          ReloadGlobals.SignatureAlg);
+        /* Covert Idenity to string */
+        String identity = sd.Signature.Identity.ToString();
+        /* Get string of stored data value */
+        var ms = new MemoryStream();
+        var bw = new BinaryWriter(ms);
+        sd.Value.Dump(bw);
+        sd.Value.GetUsageValue.dump(bw);
+        ms.Position = 0;
+        var sr = new StreamReader(ms);
+        string strValue = sr.ReadToEnd();
+        sr.Close();
+        bw.Close();
+        /* Concatenate signature input */
+        String strSignaturInput = String.Format("{0}{1}{2}{3}{4}",
+          ascii.GetString(resId.Data, 0, resId.Data.Length), kind, sd.StoreageTime,
+          strValue, identity);
+
+        byte[] signatureInput = ascii.GetBytes(strSignaturInput);
+        byte[] sigVal = sd.Signature.SignaureValue;
+
+        var signerCert = new TElX509Certificate();
+        GenericCertificate gencert = GetPKC(sd.Signature.Identity);
+        byte[] bcert = ascii.GetBytes(gencert.Certificate);
+        signerCert.LoadFromBufferPEM(bcert, "");
+        if (!signerCert.ValidateWithCA(m_ReloadConfig.CACertificate)) {
+          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
+            String.Format("validateDataSignatures: NodeID {0}, Certificate" +
+            "validation failed (CA Issuer {1})",
+            null, signerCert.IssuerName.CommonName));
+          //return false;
+        }
+
+        var cryptoProvider = new TElRSAPublicKeyCrypto();
+        cryptoProvider.InputEncoding = TSBPublicKeyCryptoEncoding.pkeBinary;
+        cryptoProvider.OutputEncoding = TSBPublicKeyCryptoEncoding.pkeBinary;
+        cryptoProvider.KeyMaterial = signerCert.KeyMaterial;
+        cryptoProvider.UseAlgorithmPrefix = false;
+        switch (sd.Signature.Algorithm.signature) {
+          case SignatureAlgorithm.rsa:
+            cryptoProvider.CryptoType = TSBRSAPublicKeyCryptoType.rsapktPKCS1;
+            break;
+          case SignatureAlgorithm.dsa:
+            throw new NotImplementedException("AccessController:" +
+              "DSA encryption not implemented!");
+          default:
+            throw new NotImplementedException("AccessController:" +
+              "encryption not implemented!");
+        }
+
+        switch (sd.Signature.Algorithm.hash) {
+          case HashAlgorithm.sha256:
+            cryptoProvider.HashAlgorithm = SBConstants.Unit.SB_ALGORITHM_DGST_SHA256;
+            break;
+          default:
+            throw new NotImplementedException("AccessController:" +
+              "hash algoritm not implemented!");
+        }
+        var msInput = new MemoryStream(signatureInput);
+        var msSignature = new MemoryStream(sigVal);
+        try {
+          var res = cryptoProvider.VerifyDetached(msInput, msSignature, 0, 0);
+          if (res == TSBPublicKeyVerificationResult.pkvrSuccess) {
+            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, "DATA SIGNATURE VALID!!");
+            return true;
+          }
+          else
+            return false;
+        }
+        catch (Exception e) {
+          var err = e.Message;
+          return false;
+        }
+    }
     #endregion
+  }
+
+
+  public class UserNodeMatchAccessControlPolicy : IAccessControlPolicy {
+
+    /// <summary>
+    /// The well-known name of the ACP, e.g., USER-MATCH
+    /// </summary>
+    public String NAME {
+      get { return "USER-NODE-MATCH"; }
+    }
+
+
+    /// <summary>
+    /// This method validates if an ACP applies.
+    /// </summary>
+    /// <param name="resId">The requested resId</param>
+    /// <param name="resId">The KindId</param>
+    /// <param name="data">The StoredData</param>
+    /// <returns>True, if ACP applies</returns>
+    public Boolean ValuePermitted(ResourceId resId, UInt32 kindId, StoredData data) {
+      //var nodeid = ReloadGlobals.retrieveNodeIDfromCertificate( signerCert, ref rfc822Name);
+
+
+      return true;
+
+    }
   }
 
 }

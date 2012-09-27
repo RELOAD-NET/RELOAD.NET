@@ -53,7 +53,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement {
       m_transport = machine.Transport;
       m_topology = machine.Topology;
       m_flm = machine.Interface_flm;
-      m_ReloadConfig = machine.ReloadConfig;      
+      m_ReloadConfig = machine.ReloadConfig;
     }
 
     /// <summary>
@@ -65,14 +65,14 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement {
     /// <returns>true, if the message will be forwarded</returns>
     public bool ProcessMsg(ReloadMessage reloadMsg) {
       if (reloadMsg.OriginatorID == m_topology.LocalNode.Id) {
-        if(m_loopedTransactions != null)
+        if (m_loopedTransactions != null)
           m_loopedTransactions.Post(reloadMsg.TransactionID);
-        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING,
+        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
           String.Format("Looped back and dropped {0} <== {1} TransId={2:x16}",
           reloadMsg.reload_message_body.RELOAD_MsgCode.ToString().PadRight(16, ' '),
           reloadMsg.OriginatorID, reloadMsg.TransactionID));
         lock ("print via") {
-          if(reloadMsg.forwarding_header.via_list != null)
+          if (reloadMsg.forwarding_header.via_list != null)
             foreach (Destination via in reloadMsg.forwarding_header.via_list)
               m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
                 String.Format("Via: {0}", via));
@@ -180,6 +180,9 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement {
             else {
               //remove local node from destination list
               reloadMsg.RemoveFirstDestEntry();
+              reloadMsg.AddViaHeader(m_topology.LocalNode.Id);
+              if (handleInterdomainMessage(reloadMsg))
+                return true; //message was processed! forwarded via GateWay!
               goto NextDestination;
             }
           }
@@ -211,7 +214,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement {
           if (NextHopNode == null || NextHopNode.Id == m_topology.LocalNode.Id) {
             if (reloadMsg.OriginatorID != m_topology.LocalNode.Id) {
               m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
-                String.Format("==> failed forwarding: {0} from {1} Dest={2}"+
+                String.Format("==> failed forwarding: {0} from {1} Dest={2}" +
                 " TransID={3:x16}",
                 reloadMsg.reload_message_body.RELOAD_MsgCode.ToString().PadRight(16, ' '),
                 reloadMsg.OriginatorID, dest.ToString(), reloadMsg.TransactionID));
@@ -225,7 +228,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement {
           else {
             if (NextHopNode.Id == reloadMsg.OriginatorID) {
               m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING,
-                String.Format("Topo claims Originator responsible:"+
+                String.Format("Topo claims Originator responsible:" +
                 " {0} from {1} Dest={2} TransID={3:x16}",
                 reloadMsg.reload_message_body.RELOAD_MsgCode.ToString().PadRight(16, ' '),
                 reloadMsg.OriginatorID, dest.ToString(), reloadMsg.TransactionID));
@@ -234,8 +237,8 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement {
             if (reloadMsg.IsRequest()) {
               reloadMsg.AddViaHeader(m_topology.LocalNode.Id);
             }
-            else
-              reloadMsg.PutViaListToDestination();
+            //else
+            //  reloadMsg.PutViaListToDestination();
 
             reloadMsg.LastHopNodeId = m_topology.LocalNode.Id;
 
@@ -307,7 +310,112 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement {
       }
       return true;
     }
+
+    /// <summary>
+    /// Checks if a inbound message contains inter-domain routing information
+    /// 
+    /// Returns true, if it will be forwarded
+    /// </summary>
+    /// <param name="reloadMsg">The inbound msg</param>
+    /// <returns>true, if the message was processed as an inter-domain message</returns>
+    /// 
+    bool handleInterdomainMessage(ReloadMessage reloadMsg) {
+      if (m_ReloadConfig.ThisMachine is TSystems.RELOAD.Extension.GWMachine) {
+        TSystems.RELOAD.Extension.GWMachine gw = (TSystems.RELOAD.Extension.GWMachine)m_ReloadConfig.ThisMachine;
+        
+        if (!reloadMsg.IsRequest()) {
+          NodeId nextHopId = reloadMsg.forwarding_header.destination_list[0].destination_data.node_id;
+          if (nextHopId == gw.GateWay.interDomainPeer.Topology.Id) {
+            gw.GateWay.response_processed(false);
+            //---------------DEBUG
+            gw.GateWay.interDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("interDomainPeer: handleInterdomainMessage via_list"));
+            if (reloadMsg.forwarding_header.via_list != null) {
+              foreach (Destination destx in reloadMsg.forwarding_header.via_list)
+                gw.GateWay.interDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Via={0} ", destx.ToString()));
+            }
+            gw.GateWay.interDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("interDomainPeer: handleInterdomainMessage destination_list"));
+            if (reloadMsg.forwarding_header.destination_list != null) {
+              foreach (Destination desty in reloadMsg.forwarding_header.destination_list)
+                gw.GateWay.interDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Dest={0} ", desty.ToString()));
+            }
+            //---------------DEBUG
+            //gw.GateWay.interDomainPeer.Transport.receive_message(reloadMsg);
+            if (gw.Validate(reloadMsg)) {
+              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING,
+                "handleInterdomainMessage(): Response Signature verified and Signer Certificate authenticated");
+              gw.GateWay.interDomainPeer.Inject(reloadMsg);
+            }
+            else
+              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
+                  "handleInterdomainMessage(): Response originator cannot be validated!");  
+            return true;
+          }
+          else if (nextHopId == gw.GateWay.mainPeer.Topology.Id) {
+            gw.GateWay.response_processed(true);
+            //---------------DEBUG
+            gw.GateWay.mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("mainPeer: handleInterdomainMessage via_list"));
+            if (reloadMsg.forwarding_header.via_list != null) {
+              foreach (Destination destx in reloadMsg.forwarding_header.via_list)
+                gw.GateWay.mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Via={0} ", destx.ToString()));
+            }
+            gw.GateWay.mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("mainPeer: handleInterdomainMessage destination_list"));
+            if (reloadMsg.forwarding_header.destination_list != null) {
+              foreach (Destination desty in reloadMsg.forwarding_header.destination_list)
+                gw.GateWay.mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Dest={0} ", desty.ToString()));
+            }
+            //---------------DEBUG
+            //gw.GateWay.mainPeer.Transport.receive_message(reloadMsg);
+            if (gw.Validate(reloadMsg)) {
+              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING,
+                "handleInterdomainMessage(): Response Signature verified and Signer Certificate authenticated");
+              gw.GateWay.mainPeer.Inject(reloadMsg);
+            }
+            else
+              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
+                  "handleInterdomainMessage(): Response originator cannot be validated!");
+            return true;
+          }
+        }
+        else if (reloadMsg.forwarding_header.fw_options != null) { //handle proprietary forwarding options destination_overlay and source_overlay --joscha
+          string destination_overlay = null;
+          string source_overlay = null;
+
+          foreach (ForwardingOption option in reloadMsg.forwarding_header.fw_options) {
+            if (option.fwo_type == ForwardingOptionsType.destinationOverlay) {
+              destination_overlay = System.Text.Encoding.Unicode.GetString(option.bytes);
+            }
+            if (option.fwo_type == ForwardingOptionsType.sourceOverlay) {
+              source_overlay = System.Text.Encoding.Unicode.GetString(option.bytes);
+            }
+          }
+          if (destination_overlay != null) {
+            //---------------DEBUG
+            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format(" reloadMsg.forwarding_header.fw_options != null via_list"));
+            if (reloadMsg.forwarding_header.via_list != null) {
+              foreach (Destination destx in reloadMsg.forwarding_header.via_list)
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Via={0} ", destx.ToString()));
+            }
+            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format(" reloadMsg.forwarding_header.fw_options != null destination_list"));
+            if (reloadMsg.forwarding_header.destination_list != null) {
+              foreach (Destination desty in reloadMsg.forwarding_header.destination_list)
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Dest={0} ", desty.ToString()));
+            }
+            //---------------DEBUG
+            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format(m_ReloadConfig.OverlayName + ": " + "for destinationOverlay: " + destination_overlay));
+            if (gw.Validate(reloadMsg)) {
+              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING,
+                "handleInterdomainMessage(): Request Signature verified and Signer Certificate authenticated");
+              gw.GateWay.Receive(destination_overlay, reloadMsg);
+              return true;
+            }   
+          }
+        }
+      }
+      return false;
+    }
   }
+
+
 
 #endregion
 }
