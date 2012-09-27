@@ -1,5 +1,5 @@
 ﻿/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-* Copyright (C) 2012 Thomas Kluge <t.kluge@gmx.de> 
+* Copyright (C) 2012, Telekom Deutschland GmbH 
 *
 * This file is part of RELOAD.NET.
 *
@@ -18,10 +18,21 @@
 *
 * see https://github.com/RELOAD-NET/RELOAD.NET
 * 
-* Last edited by: Alex <alexander.knauf@gmail.com>
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 //#define IETF83_ENROLL
+
+/* There are two valid CSR bodys possible. The binary DER format and the 
+ * PEM format, which is base64 between 
+   -----BEGIN CERTIFICATE REQUEST-----
+ * and 
+ * -----END CERTIFICATE REQUEST-----
+ *
+ * note Thomas: Is that true? It looks like DER is standard
+ */
+
+#define ENROLL_USE_DER_FORMAT
+//#define IMSI_AUTHENTIFICATION
 
 using System;
 using System.Collections.Generic;
@@ -56,11 +67,15 @@ using SBPKCS10;
 using System.Security.Cryptography.X509Certificates;
 using System.Net.Security;
 
-namespace TSystems.RELOAD.Enroll {
-    public class ReloadConfigResolve {
+
+namespace TSystems.RELOAD.Enroll
+{
+  public class ReloadConfigResolve
+  {
 
         //for enrollment over https without a trusted (selfsigned) certificate
-        private static bool OnCheckSSLCert(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors) {
+    private static bool OnCheckSSLCert(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
+    {
             return true;
         }
 
@@ -68,32 +83,40 @@ namespace TSystems.RELOAD.Enroll {
         /* DNS SRV for given Overlay name, if no config server URL is provided out of band */
 
         private bool m_fEnrollmentserverAvailable = false;
-        private string enrollment_url = "";
+
+    private string configuration_url;
+    private string enrollment_url;
         private ReloadConfig m_ReloadConfig;
 
-        public ReloadConfigResolve(ReloadConfig reloadConfig) {
+    public ReloadConfigResolve(ReloadConfig reloadConfig)
+    {
             m_ReloadConfig = reloadConfig;
 
-            SBUtils.Unit.SetLicenseKey(ReloadGlobals.SBB_LICENSE_SBB7_KEY);
-            SBUtils.Unit.SetLicenseKey(ReloadGlobals.SBB_LICENSE_PKI7_KEY);
+      SBUtils.Unit.SetLicenseKey(ReloadGlobals.SBB_LICENSE_SBB8_KEY);
+      //SBUtils.Unit.SetLicenseKey(ReloadGlobals.SBB_LICENSE_PKI8_KEY);
         }
 
-        public string EnrollmentUrl {
+    public string EnrollmentUrl
+    {
             get { return enrollment_url; }
         }
 
-        public bool EnrollmentserverAvailable {
+    public bool EnrollmentserverAvailable
+    {
             get { return m_fEnrollmentserverAvailable; }
         }
 
-        public string ResolveNaptr(string e164_Number) {
+    public string ResolveNaptr(string e164_Number)
+    {
             /* Need to know about DNS servers available */
-            try {
+      try
+      {
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("Resolving NAPTR for {0}", e164_Number));
 
                 string e164_NumberNaptr = "";
 
-                for (int i = e164_Number.Length - 1; i > 0; i--) {
+        for (int i = e164_Number.Length - 1; i > 0; i--)
+        {
                     if (e164_Number[i] == ' ' || e164_Number[i] == '+')
                         continue;
                     e164_NumberNaptr += e164_Number[i];
@@ -108,7 +131,8 @@ namespace TSystems.RELOAD.Enroll {
                     s_dnsServerAddrList.Add(ReloadGlobals.DNS_Address);
                 //s_dnsServerAddrList.Add("141.39.41.73");
 
-                foreach (string s_dnsServerAddr in s_dnsServerAddrList) {
+        foreach (string s_dnsServerAddr in s_dnsServerAddrList)
+        {
                     DnsQueryRequest dnsQuery = new DnsQueryRequest();
 
                     //string e164_NumberNaptr = "2.2.2.2.2.2.2.1.7.1.9.4.e164.arpa";
@@ -119,7 +143,8 @@ namespace TSystems.RELOAD.Enroll {
                     DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, e164_NumberNaptr, DnDns.Enums.NsType.MAPTR, DnDns.Enums.NsClass.INET, ProtocolType.Udp);
 #endif
                     if (dnsResponse != null)
-                        foreach (IDnsRecord record in dnsResponse.Answers) {
+            foreach (IDnsRecord record in dnsResponse.Answers)
+            {
                             string[] lines = System.Text.RegularExpressions.Regex.Split(record.Answer, "!");
 
                             if (lines != null && lines.Length > 2)
@@ -129,27 +154,32 @@ namespace TSystems.RELOAD.Enroll {
                         }
                 }
             }
-            catch (Exception ex) {
+      catch (Exception ex)
+      {
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("DNS NAPTR for {0} failed: {1}", e164_Number, ex.Message));
             }
             return null;
 
         }
 
-        public string ResolveConfigurationServer(string OverlayName) {
+    public string ResolveConfigurationServer(string OverlayName)
+    {
             if (ReloadGlobals.ForceLocalConfig)
                 return null;
 
             /* Need to know about DNS servers available */
-            try {
+      try
+      {
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, "Resolving Configuration server...");
 
                 List<string> s_dnsServerAddrList = new List<string>();
 
+        if (ReloadGlobals.DNS_Address != null && ReloadGlobals.DNS_Address.Length != 0)
                 if (!s_dnsServerAddrList.Contains(ReloadGlobals.DNS_Address))
                     s_dnsServerAddrList.Add(ReloadGlobals.DNS_Address);
 
-                foreach (string s_dnsServerAddr in s_dnsServerAddrList) {
+        foreach (string s_dnsServerAddr in s_dnsServerAddrList)
+        {
 
                     DnsQueryRequest dnsQuery = new DnsQueryRequest();
 
@@ -165,12 +195,15 @@ namespace TSystems.RELOAD.Enroll {
 
 #endif
                     if (dnsResponse != null)
-                        foreach (IDnsRecord record in dnsResponse.Answers) {
+            foreach (IDnsRecord record in dnsResponse.Answers)
+            {
                             string[] lines = System.Text.RegularExpressions.Regex.Split(record.Answer, "\r\n");
                             //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("DNS SRV lookup returned {0}", record.Answer));
 
-                            foreach (string line in lines) {
-                                if (line.StartsWith("HostName")) {
+              foreach (string line in lines)
+              {
+                if (line.StartsWith("HostName"))
+                {
                                     string[] lines2 = System.Text.RegularExpressions.Regex.Split(line, " ");
                                     string enrollment_url = lines2[1].TrimEnd('.');
 
@@ -185,39 +218,22 @@ namespace TSystems.RELOAD.Enroll {
                         }
                 }
             }
-            catch (Exception ex) {
+      catch (Exception ex)
+      {
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("DNS SRV for p2psip_enroll failed: {0}", ex.Message));
             }
             return null;
         }
 
-        public TextReader GetConfigDocument() {
+    public TextReader GetConfigDocument()
+    {
             TextReader tr_xml = null;
 
-            /* new */
-#if false
-            //trigger internet connection
-            try{
-                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("Establishing internet connection..."));
+      if (!ReloadGlobals.ForceLocalConfig)
+      {
+        /* load static settings of enrollment server, in this case dynamic resolution is skipped */
+        configuration_url = ReloadGlobals.ConfigurationServer;
 
-                HttpWebRequest httpWebRequestCheck = (HttpWebRequest)WebRequest.Create("http://www.google.de");
-                HttpWebResponse httpWebesponseCheck = null;
-
-                httpWebRequestCheck.Timeout = ReloadGlobals.WEB_REQUEST_TIMEOUT;
-
-                //Send Web-Request and receive a Web-Response
-                httpWebesponseCheck = (HttpWebResponse)httpWebRequestCheck.GetResponse();
-                
-                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("... done."));
-            }
-            catch(Exception ex){
-                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, String.Format("No internet connection available: " + ex.Message));
-            }
-#endif
-            /* end new */
-
-
-            if (!ReloadGlobals.ForceLocalConfig) {
                 /* Determine Configuration server */
 #if IETF80_ENROLL
 //              enrollment_url = "http://130.129.20.69/.well-known/p2psip-enroll";
@@ -227,35 +243,31 @@ namespace TSystems.RELOAD.Enroll {
 #else
                 int iRetries = 3;
 
-                for (int i = 0; i < iRetries; i++) {
-                    /* HAW_ENROLLMENT = enroll.t-reload.realmv6.org this domain shoud not be resolved to an IP
-                     * (Virtual Server)
-                     */
-                    if (ReloadGlobals.IsVirtualServer)
-                        // TODO
-                        //enrollment_url = String.Format("https://{0}/p2psip/enroll/", m_ReloadConfig.OverlayName);
-                        enrollment_url = ReloadGlobals.EnrollmentServer;
-                    else
-                        enrollment_url = new ReloadConfigResolve(m_ReloadConfig).ResolveConfigurationServer(m_ReloadConfig.OverlayName);  //--joscha
-                    if (enrollment_url != null) {
-                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TLS, String.Format("Configuration server url as of DNS SRV: '{0}'", enrollment_url));
+          for (int i = 0; i < iRetries; i++)
+          {
+            configuration_url = new ReloadConfigResolve(m_ReloadConfig).ResolveConfigurationServer(ReloadGlobals.OverlayName);
+
+            if (configuration_url != null)
+            {
+              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TLS, String.Format("Configuration server URL as of DNS SRV: '{0}'", configuration_url));
                         break;
                     }
                 }
-#endif
+        }
+
                 HttpWebResponse httpWebesponse = null;
 
-                if (enrollment_url == null || ReloadGlobals.FixedDNS) {
-                    //TKHACK fallback if DNS can't be used properly
-                    enrollment_url = String.Format("http://{0}/p2psip/enroll/", ReloadGlobals.DNS_Address);
-                    if (!ReloadGlobals.FixedDNS)
-                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, String.Format("DNS SRV failed, set enrollment url to {0}.", enrollment_url));
+        if (configuration_url == null)
+        {
+          configuration_url = String.Format("https://{0}/.well-known/p2psip-enroll", ReloadGlobals.OverlayName);
+          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, String.Format("DNS SRV failed, set configuration server URL to {0}.", configuration_url));
                 }
 
-                try {
-                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("Calling Enrollment Server: {0}", enrollment_url));
+        try
+        {
+          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("Calling configuration server: {0}", configuration_url));
                     //Create a Web-Request to an URL
-                    HttpWebRequest httpWebRequest = (HttpWebRequest)WebRequest.Create(enrollment_url);
+          HttpWebRequest httpWebRequest = (HttpWebRequest)WebRequest.Create(configuration_url);
                     httpWebRequest.Timeout = ReloadGlobals.WEB_REQUEST_TIMEOUT;
                     if(ReloadGlobals.IgnoreSSLErrors)
                         httpWebRequest.AuthenticationLevel = AuthenticationLevel.None;
@@ -267,12 +279,14 @@ namespace TSystems.RELOAD.Enroll {
                     httpWebesponse = (HttpWebResponse)httpWebRequest.GetResponse();
                     m_fEnrollmentserverAvailable = true;
                 }
-                catch {
-                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Enrollment Server not available, using local Configuration"));
+        catch (WebException ex)
+        {
+          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "Configuration server not available: " + ex.Message + "using local configuration");
                 }
 
                 //Translate data from the Web-Response to a string
-                if (m_fEnrollmentserverAvailable) {
+        if (m_fEnrollmentserverAvailable)
+        {
                     Stream dataStream = httpWebesponse.GetResponseStream();
                     tr_xml = new StreamReader(dataStream, Encoding.UTF8);
                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO, "Successfully downloaded Configuration document");
@@ -280,7 +294,8 @@ namespace TSystems.RELOAD.Enroll {
             }
 
             // if Configuration file retrieval failed, then read from local file
-            if (tr_xml == null) {
+      if (tr_xml == null)
+      {
 #if COMPACT_FRAMEWORK
                 // Check for OsVersion to remove URI prefix if it is not WindowsCE.
                 string basex = Assembly.GetExecutingAssembly().GetName().CodeBase.ToString();
@@ -294,83 +309,75 @@ namespace TSystems.RELOAD.Enroll {
             return tr_xml;
         }
 
-        public void ReadConfig() {
+    public void ReadConfig()
+    {
             TextReader tr_xml = (TextReader)GetConfigDocument();
 
-            if (tr_xml != null) {
+      if (tr_xml != null)
+      {
                 //string s = tr_xml.ReadToEnd();
                 XmlSerializer serializer = new XmlSerializer(typeof(overlayelement));
                 m_ReloadConfig.Document = new ReloadOverlayConfiguration((overlayelement)serializer.Deserialize(tr_xml));
-                //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("Enrollment Server URL as of Configuration: '{0}'", m_ReloadOverlayConfiguration.Overlay.Configuration.enrollmentserver));
 
-                try {
+        try
+        {
 
                     var p2psipConfig = m_ReloadConfig.Document.Overlay;
 
                     if (p2psipConfig.configuration.maxmessagesizeSpecified)
                         ReloadGlobals.MAX_PACKET_BUFFER_SIZE = (int)m_ReloadConfig.Document.Overlay.configuration.maxmessagesize;
 
-#if IETF80_ENROLL
-                    ReloadGlobals.ReportURL="https://saints.bercos.de/test/generic_tests/reload/dataentry.aspx";
-#else
                     if (p2psipConfig.configuration.reportingurl != null)
-                        //ReloadGlobals.ReportURL = m_ReloadConfig.Document.Overlay.configuration.reportingurl; --joscha
                         m_ReloadConfig.ReportURL = m_ReloadConfig.Document.Overlay.configuration.reportingurl;
-#endif
 
-                    foreach (kindblock block in p2psipConfig.configuration.requiredkinds) {
-                        if (block.kind.name != null) {
-                            if (block.kind.name.ToUpper() == "SIP-REGISTRATION") {
-                                if (block.kind.datamodel.ToLower() == "single")
-                                    ReloadGlobals.SIP_REGISTRATION_DATA_MODEL = ReloadGlobals.DataModel.SINGLE_VALUE;
-                                else if (block.kind.datamodel.ToLower() == "array")
-                                    ReloadGlobals.SIP_REGISTRATION_DATA_MODEL = ReloadGlobals.DataModel.ARRAY;
-                                else if (block.kind.datamodel.ToLower() == "dictionary")
-                                    ReloadGlobals.SIP_REGISTRATION_DATA_MODEL = ReloadGlobals.DataModel.DICTIONARY;
+          if (p2psipConfig.configuration.enrollmentserver != null)
+            enrollment_url = p2psipConfig.configuration.enrollmentserver[0];
+
+          foreach (kindblock block in p2psipConfig.configuration.requiredkinds)
+          {
+            if (block.kind.name != null)
+            {
+              if (block.kind.name.ToUpper() == "SIP-REGISTRATION")
+                ReloadGlobals.SIP_REGISTRATION_DATA_MODEL = ReloadGlobals.DataModelFromString(block.kind.datamodel);
+              else if (block.kind.name.ToUpper() == "CERTIFICATE_BY_NODE")
+                ReloadGlobals.CERTIFICATE_BY_NODE_DATA_MODEL = ReloadGlobals.DataModelFromString(block.kind.datamodel);
+              else if (block.kind.name.ToUpper() == "CERTIFICATE_BY_USER")
+                ReloadGlobals.CERTIFICATE_BY_USER_DATA_MODEL = ReloadGlobals.DataModelFromString(block.kind.datamodel);
                             }
-                            if (block.kind.name.ToUpper() == "CERTIFICATE_BY_NODE") {
-                                if (block.kind.datamodel.ToLower() == "single")
-                                    ReloadGlobals.CERTIFICATE_BY_NODE_DATA_MODEL = ReloadGlobals.DataModel.SINGLE_VALUE;
-                                else if (block.kind.datamodel.ToLower() == "array")
-                                    ReloadGlobals.CERTIFICATE_BY_NODE_DATA_MODEL = ReloadGlobals.DataModel.ARRAY;
-                                else if (block.kind.datamodel.ToLower() == "dictionary")
-                                    ReloadGlobals.CERTIFICATE_BY_NODE_DATA_MODEL = ReloadGlobals.DataModel.DICTIONARY;
                             }
-                        }
-                    }
                     string rootcert = p2psipConfig.configuration.rootcert;
 
-                    if (rootcert != null && rootcert.Length > 0) {
+          if (rootcert != null && rootcert.Length > 0)
+          {
                         //remove all whitespaces and trailing new lines!!
                         rootcert = rootcert.TrimStart('\n');
                         rootcert = rootcert.TrimEnd('\n');
                         rootcert = rootcert.Replace("  ", "");
                         m_ReloadConfig.CACertificate = new TElX509Certificate();
                         byte[] buffer = new System.Text.ASCIIEncoding().GetBytes(rootcert);
-                        //m_ReloadConfig.CACertificate.LoadFromBufferPEM(buffer,"");
                         m_ReloadConfig.CACertificate.LoadFromBuffer(buffer);
                     }
 
                     if (p2psipConfig.configuration.landmarks != null &&
-                        p2psipConfig.configuration.landmarks.landmarkhost.Length > 0) {
+              p2psipConfig.configuration.landmarks.landmarkhost.Length > 0)
+          {
                         var landmark = p2psipConfig.configuration.landmarks.landmarkhost[0].address;
                     }
-
-#if IETF80_ENROLL
-                    if (m_ReloadConfig.ReloadOverlayConfiguration.Overlay.Configuration.enrollmentserver.Length > 0)
-                        enrollment_url = m_ReloadConfig.ReloadOverlayConfiguration.Overlay.Configuration.enrollmentserver;
-#endif
                 }
-                catch (Exception ex) {
+        catch (Exception ex)
+        {
                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "ReadConfig: " + ex.Message);
                 }
             }
         }
 
-        public void SimpleNodeIdRequest() {
-            try {
+    public void SimpleNodeIdRequest()
+    {
+      try
+      {
 
-                if (EnrollmentserverAvailable) {
+        if (EnrollmentserverAvailable)
+        {
                     HttpWebRequest httpWebPost;
 
                     /* get node id */
@@ -394,13 +401,15 @@ namespace TSystems.RELOAD.Enroll {
 
                     string[] words = response.Split(':', ',', '/', '@');
 
-                    if (m_ReloadConfig.IMSI != null && m_ReloadConfig.IMSI != "") {
+          if (m_ReloadConfig.IMSI != null && m_ReloadConfig.IMSI != "")
+          {
                         m_ReloadConfig.E64_Number = words[1];
 
                         ReloadConfigResolve res = new ReloadConfigResolve(m_ReloadConfig);
                         m_ReloadConfig.SipUri = res.ResolveNaptr(m_ReloadConfig.E64_Number);
 
-                        if (m_ReloadConfig.SipUri == null) {
+            if (m_ReloadConfig.SipUri == null)
+            {
                             m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, "DNS Enum fallback to sip uri analysis");
                             m_ReloadConfig.SipUri = m_ReloadConfig.E64_Number;
                             m_ReloadConfig.SipUri = m_ReloadConfig.SipUri.TrimStart(' ');
@@ -412,30 +421,36 @@ namespace TSystems.RELOAD.Enroll {
 
                         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO, String.Format("Enrollment Server assigned: NodeId = '{0}' SipUri = '{1}' ", m_ReloadConfig.LocalNodeID, m_ReloadConfig.SipUri));
                     }
-                    else {
+          else
+          {
                         m_ReloadConfig.LocalNodeID = new NodeId(HexStringConverter.ToByteArray(words[4]));
                         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO, String.Format("Enrollment Server assigned: NodeId = '{0}'", m_ReloadConfig.LocalNodeID));
                     }
                 }
             }
-            catch (Exception ex) {
+      catch (Exception ex)
+      {
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "SimpleNodeIdRequest: " + ex.Message);
             }
         }
 
-        public void EnrollmentProcedure() {
+    public void EnrollmentProcedure()
+    {
             m_ReloadConfig.ReloadLocalCertStorage = new TElMemoryCertStorage();
             m_ReloadConfig.ReloadLocalCertStorage.Clear();
 
             if (EnrollmentUrl != "")
-                if (CertificateSigningRequest(EnrollmentUrl) == false) {
-                    if (m_ReloadConfig.CertName.Length > 0) {
+        if (CertificateSigningRequest(EnrollmentUrl) == false)
+        {
+          if (m_ReloadConfig.CertName.Length > 0)
+          {
                         FileStream fs = new FileStream(m_ReloadConfig.CertName, FileMode.Open, FileAccess.Read);
                         m_ReloadConfig.ReloadLocalCertStorage.LoadFromStreamPFX(fs, m_ReloadConfig.CertPassword, (int)fs.Length);
                     }
                 }
 
-            try {
+      try
+      {
 
                 m_ReloadConfig.MyCertificate = m_ReloadConfig.ReloadLocalCertStorage.get_Certificates(0);
 
@@ -446,11 +461,13 @@ namespace TSystems.RELOAD.Enroll {
                     throw new System.Exception("Invalid certificate");
 
                 /* RELOAD BASE 07, pg. 112 */
-                try {
+        try
+        {
                     ReloadGlobals.SelfSignPermitted = m_ReloadConfig.Document.Overlay.configuration.selfsignedpermitted.Value;
                 }
                 catch { };
-                if (m_ReloadConfig.MyCertificate.SelfSigned) {
+        if (m_ReloadConfig.MyCertificate.SelfSigned)
+        {
                     if (!ReloadGlobals.SelfSignPermitted)
                         throw new System.Exception("Found self signed certificate, but self signing is not allowed by config");
                 }
@@ -459,8 +476,10 @@ namespace TSystems.RELOAD.Enroll {
                 m_ReloadConfig.LocalNodeID = ReloadGlobals.retrieveNodeIDfromCertificate(
                   m_ReloadConfig.MyCertificate, ref rfc822Name);
 
-                if (rfc822Name != null) {
-                    if (m_ReloadConfig.IMSI != null && m_ReloadConfig.IMSI != "" && m_ReloadConfig.IMSI != "VNODE") {
+        if (rfc822Name != null)
+        {
+          if (m_ReloadConfig.IMSI != null && m_ReloadConfig.IMSI != "" && m_ReloadConfig.IMSI != "VNODE")
+          {
                         string[] rfc822NameSplit = rfc822Name.Split(':', ',', '/', '@');
 
                         m_ReloadConfig.E64_Number = rfc822NameSplit[0];
@@ -473,7 +492,8 @@ namespace TSystems.RELOAD.Enroll {
                 }
                 System.Diagnostics.Debug.Assert(m_ReloadConfig.LocalNodeID != null && m_ReloadConfig.LocalNodeID != m_ReloadConfig.LocalNodeID.Max() && m_ReloadConfig.LocalNodeID != m_ReloadConfig.LocalNodeID.Min());
             }
-            catch (Exception ex) {
+      catch (Exception ex)
+      {
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "CertificateSigningRequest: " + ex.Message);
             }
         }
@@ -493,7 +513,8 @@ namespace TSystems.RELOAD.Enroll {
         /// <summary>
         /// Used to generate certificate request
         /// </summary>
-        public bool CertificateSigningRequest(string enrollment_url) {
+    public bool CertificateSigningRequest(string enrollment_url)
+    {
             TElCertificateRequest FRequest = null;
             string sLocalCertFilename;
 
@@ -504,31 +525,32 @@ namespace TSystems.RELOAD.Enroll {
             string basex = Assembly.GetExecutingAssembly().GetName().CodeBase.ToString();
             string applicationDirectory = Path.GetDirectoryName(basex);
 
-            string pem_file = applicationDirectory + "\\" + sLocalCertFilename + ".csr";
+      string cert_file = applicationDirectory + "\\" + sLocalCertFilename + ".csr";
             string privateKey_file = applicationDirectory +  "\\" + sLocalCertFilename + ".key";
 #else
-            //TESTTEST
-            //sLocalCertFilename = "262017430126003";
-#if IETF83_ENROLL
-            string pem_file = sLocalCertFilename + ".der";
+#if ENROLL_USE_DER_FORMAT      string cert_file = sLocalCertFilename + ".der";
 #else
-            string pem_file = sLocalCertFilename + ".pem";
-            //string pem_file = sLocalCertFilename + ".csr";
+      string cert_file = sLocalCertFilename + ".pem";
 #endif
+
             string privateKey_file = sLocalCertFilename + ".key";
 #endif
-            byte[] pemCSR = null;
+      byte[] byteCSR = null;
             byte[] privateKey = null;
 
-            try {
-                pemCSR = File.ReadAllBytes(pem_file);
+      try
+      {
+        byteCSR = File.ReadAllBytes(cert_file);
                 privateKey = File.ReadAllBytes(privateKey_file);
             }
-            catch {
+      catch
+      {
             }
 
-            if (pemCSR == null || pemCSR.Length == 0) {
-                try {
+      if (byteCSR == null || byteCSR.Length == 0)
+      {
+        try
+        {
                     if (m_ReloadConfig.Logger != null)
                         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("Generate new Certificate Signing Request, please wait.."));
 #if COMPACT_FRAMEWORK
@@ -538,6 +560,9 @@ namespace TSystems.RELOAD.Enroll {
                     FRequest = new TElCertificateRequest(null);
                     FRequest.Subject.Count = 6;
                     for (int i = 0; i <= 5; i++) FRequest.Subject.set_Tags(i, SBASN1Tree.Unit.SB_ASN1_PRINTABLESTRING);
+
+          /* private certificate configuration */  
+          
                     FRequest.Subject.set_OIDs(0, SBUtils.Unit.SB_CERT_OID_COUNTRY);
                     FRequest.Subject.set_Values(0, SBUtils.Unit.BytesOfString("DE"));
                     FRequest.Subject.set_OIDs(1, SBUtils.Unit.SB_CERT_OID_STATE_OR_PROVINCE);
@@ -553,38 +578,42 @@ namespace TSystems.RELOAD.Enroll {
                     FRequest.Subject.set_Values(4, SBUtils.Unit.BytesOfString("R&D"));
                     FRequest.Subject.set_OIDs(5, SBUtils.Unit.SB_CERT_OID_COMMON_NAME);
 
-#if IETF83_ENROLL
-                    FRequest.Subject.set_Values(5, SBUtils.Unit.BytesOfString("Joscha"));
+
+#if IMSI_AUTHENTIFICATION
+          FRequest.Subject.set_Values(5, SBUtils.Unit.BytesOfString(m_ReloadConfig.IMSI == "" ? "VNODE" : "IMSI:" + m_ReloadConfig.IMSI));
 #else
-                    FRequest.Subject.set_Values(5, SBUtils.Unit.BytesOfString(m_ReloadConfig.IMSI == "" ? "VNODE" : "IMSI:" + m_ReloadConfig.IMSI));
+          FRequest.Subject.set_Values(5, SBUtils.Unit.BytesOfString("thomas"));
 #endif
                     FRequest.Generate(SBUtils.Unit.SB_CERT_ALGORITHM_ID_RSA_ENCRYPTION,
                                       2048,
                                       SBUtils.Unit.SB_CERT_ALGORITHM_SHA1_RSA_ENCRYPTION);
 
-#if IETF83_ENROLL
-                    FRequest.SaveToBuffer(out pemCSR);
+#if ENROLL_USE_DER_FORMAT
+          FRequest.SaveToBuffer(out byteCSR);
 #else
-                    FRequest.SaveToBufferPEM(out pemCSR);
+          FRequest.SaveToBufferPEM(out byteCSR);
 #endif
                     FRequest.GetPrivateKey(out privateKey);
 
                     //save Certificate Signing Request and private Key to disk
-                    File.WriteAllBytes(pem_file, pemCSR);
+          File.WriteAllBytes(cert_file, byteCSR);
                     File.WriteAllBytes(privateKey_file, privateKey);
 
                     if (m_ReloadConfig.Logger != null)
                         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("... ready."));
                 }
-                catch (Exception ex) {
+        catch (Exception ex)
+        {
                     if (m_ReloadConfig.Logger != null)
                         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
                             String.Format("Generation of CSR failed {0}", ex.ToString()));
                 }
             }
 
-            try {
-                if (enrollment_url != null) {
+      try
+      {
+        if (enrollment_url != null)
+        {
                     HttpWebRequest httpWebPost;
 
                     /* get node id and sip url */
@@ -592,79 +621,120 @@ namespace TSystems.RELOAD.Enroll {
                     httpWebPost = (HttpWebRequest)WebRequest.Create(new Uri("https://implementers.org/enrollment?username=Joscha&password=password&count=1"));
 #else
                     httpWebPost = (HttpWebRequest)WebRequest.Create(new Uri(enrollment_url));
-#endif
+
                     /* As of RELOAD draft, use POST */
                     httpWebPost.Method = "POST";
                     httpWebPost.Accept = "application/pkix-cert";
-                    httpWebPost.ContentType = "application/pkcs10";
                     httpWebPost.Timeout = ReloadGlobals.WEB_REQUEST_TIMEOUT;
-                    //httpWebPost.AllowWriteStreamBuffering = true;
-                    //httpWebPost.SendChunked = true;
-                    httpWebPost.ContentLength = pemCSR.Length;
                     httpWebPost.ProtocolVersion = HttpVersion.Version10;
                     httpWebPost.UserAgent = "T-Systems RELOAD MDI Appl 1.0";
 
-                    /* There are two valid CSR bodys possible. The binary DER format and the 
-                     * PEM format, which is base64 between 
-                       -----BEGIN CERTIFICATE REQUEST-----
-                     * and 
-                     * -----END CERTIFICATE REQUEST-----
+#if ENROLL_USE_DER_FORMAT
+        /*
+          this is a sample post request of Marcs Testformular at
+          https://reloadnet-reload.implementers.org/enrollment 
+          -----------------------------265001916915724
+          Content-Disposition: form-data; name="username" Thomas
+          -----------------------------265001916915724
+          Content-Disposition: form-data; name="password" **********
+          -----------------------------265001916915724
+          Content-Disposition: form-data; name="nodeids" 1
+          -----------------------------265001916915724
+          Content-Disposition: form-data; name="csr"; filename="blob"
+          Content-Type: application/pkcs10
                      */
 
-#if IETF83_ENROLL
-                    //httpWebPost.TransferEncoding = "binary";
-                    BinaryWriter writer = new BinaryWriter(httpWebPost.GetRequestStream());
-                    writer.Write(pemCSR);
+          string username = "Thomas";
+          string password = "Eholim_f67";
+          //string username = "anonymous";
+          //string password = "test";
+
+          string boundary = "----------------------------" + DateTime.Now.Ticks.ToString("x");
+
+          httpWebPost.ContentType = "multipart/form-data; boundary=" + boundary;
+
+          byte[] boundaryclosebytes = System.Text.Encoding.ASCII.GetBytes("\r\n--" + boundary + "--\r\n");
+
+          string formdataTemplate = "\r\n--"+ boundary +
+              "\r\nContent-Disposition: form-data; name=\"username\"\r\n\r\n{0}\r\n--" + boundary +
+              "\r\nContent-Disposition: form-data; name=\"password\"\r\n\r\n{1}\r\n--" + boundary +
+              "\r\nContent-Disposition: form-data; name=\"nodeids\"\r\n\r\n1";
+
+          string formitem = string.Format(formdataTemplate, username, password);
+          byte[] formitembytes = System.Text.Encoding.UTF8.GetBytes(formitem);
+
+          Stream memStream = new System.IO.MemoryStream();
+          BinaryWriter writer = new BinaryWriter(memStream);
+
+          writer.Write(formitembytes);
+          formitem = "\r\n--" + boundary + "\r\nContent-Disposition: form-data; name=\"csr\"; filename=\"blob\"\r\nContent-Type: application/pkcs10\r\n\r\n";
+          formitembytes = System.Text.Encoding.UTF8.GetBytes(formitem);
+          writer.Write(formitembytes);
+          writer.Write(byteCSR);
+          writer.Write(boundaryclosebytes);
+ 
+          httpWebPost.ContentLength = memStream.Length;
+
+          Stream requestStream = httpWebPost.GetRequestStream();
+
+          memStream.Position = 0;
+          memStream.CopyTo(requestStream);
+
+          using (Stream file = File.OpenWrite("C:\\test.dat"))
+          {
+            memStream.Position = 0;
+            memStream.CopyTo(file);
+          }
+
                     writer.Close();
+
 #else
-                    //httpWebPost.TransferEncoding = "base64";                    
+          httpWebPost.ContentType = "application/pkcs10";
+
                     StreamWriter writer = new StreamWriter(httpWebPost.GetRequestStream());
-                    string str_pemCSR = System.Text.Encoding.ASCII.GetString(
-                      pemCSR, 0, pemCSR.Length);
+          string str_pemCSR = System.Text.Encoding.ASCII.GetString(byteCSR, 0, byteCSR.Length);
                     writer.Write(str_pemCSR);
                     writer.Close();
+
+          httpWebPost.ContentLength = byteCSR.Length;
 #endif
                     HttpWebResponse httpPostResponse = null;
                     //Send Web-Request and receive a Web-Response
-                    try {
+          try
+          {
                         httpPostResponse = (HttpWebResponse)httpWebPost.GetResponse();
                     }
-                    catch (Exception ex){
-                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "HTTP error " + ex.Message);
+          catch (WebException ex)
+          {
+            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "CSR returns:" + ex.Message);
                     }
+
+          if (httpPostResponse != null)
+          {
 
                     TElX509Certificate cert = new TElX509Certificate();
 
-                    // TEST
-                    byte[] signedCert = ReloadGlobals.ConvertNonSeekableStreamToByteArray(httpPostResponse.GetResponseStream());
-#if IETF83_ENROLL
-                    cert.LoadFromBuffer(signedCert);
+#if ENROLL_USE_DER_FORMAT
+            cert.LoadFromBuffer(ReloadGlobals.ConvertNonSeekableStreamToByteArray(httpPostResponse.GetResponseStream()));
 #else
-                    if (httpWebPost.TransferEncoding != "binary")
-                        cert.LoadFromBufferPEM(signedCert, "");
-                    else
-                        cert.LoadFromBuffer(signedCert);
+            cert.LoadFromBufferPEM(ReloadGlobals.ConvertNonSeekableStreamToByteArray(httpPostResponse.GetResponseStream()), "");
 #endif
-
-                    if (privateKey != null) {
+            if (privateKey != null)
+            {
                         cert.LoadKeyFromBuffer(privateKey);
                         m_ReloadConfig.ReloadLocalCertStorage.Add(cert, true); //true -> copy private key
 
-                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO,
-                          String.Format("Successfully received certificate, Issuer: {0}",
-                          cert.IssuerName.CommonName));
-                        cert.SaveToBufferPEM(out signedCert, "");
-                        File.WriteAllBytes("signed_cert.pem", signedCert);
-                    }
+              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO, String.Format("Successfully received certificate, Issuer: {0}", cert.IssuerName.CommonName));
                     return true;
                 }
-                return false;
             }
-            catch (Exception ex) {
+        }
+      }
+      catch (Exception ex)
+      {
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("CSR failed {0}", ex.ToString()));
             }
             return false;
         }
     }
-
 }

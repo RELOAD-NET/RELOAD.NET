@@ -32,10 +32,10 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="DnDns">
-      <HintPath>..\Extern\DnDns.dll</HintPath>
+      <HintPath>..\..\..\MP2PSIP\DnDns\bin\Debug\DnDns.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.Ccr.Core">
-      <HintPath>..\Extern\CCR R2\Microsoft.Ccr.Core.dll</HintPath>
+      <HintPath>..\..\..\MP2PSIP\Extern\CCR R2\Microsoft.Ccr.Core.dll</HintPath>
     </Reference>
     <Reference Include="SecureBlackbox, Version=9.1.215.0, Culture=neutral, PublicKeyToken=5a62fa96d0ac431a, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>

@@ -1,5 +1,5 @@
 ﻿/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
-* Copyright (C) 2012 Thomas Kluge <t.kluge@gmx.de> 
+* Copyright (C) 2012, Telekom Deutschland GmbH 
 *
 * This file is part of RELOAD.NET.
 *
@@ -18,7 +18,6 @@
 *
 * see https://github.com/RELOAD-NET/RELOAD.NET
 * 
-* Last edited by: Alex <alexander.knauf@gmail.com>
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 using System;
@@ -703,8 +702,11 @@ Predecessor cache:";
             SendPingToAllNeighbors();
             if (!ReloadConfig.IamClient)
               FixFingers();
-            Arbiter.Activate(ReloadConfig.DispatcherQueue,
-              new IterativeTask<bool>(false, m_transport.HandoverKeys));
+            if (m_ReloadConfig.State == ReloadConfig.RELOAD_State.Joined || m_ReloadConfig.State == ReloadConfig.RELOAD_State.Joining)
+            {
+              Arbiter.Activate(ReloadConfig.DispatcherQueue,
+                new IterativeTask<bool>(false, m_transport.HandoverKeys));
+            }
           }
         }
         catch (Exception ex) {
@@ -777,9 +779,9 @@ Predecessor cache:";
       Topology.TopologyPlugin.RoutingTable rt = m_topology.routing_table;
       List<FTEntry> fingers = m_topology.routing_table.rmDuplicateFingers(
         rt.FingerTable);
-      m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO, "Fix Fingers now!");
 
-      if (!m_ReloadConfig.IamClient) {
+      if (m_ReloadConfig.State == ReloadConfig.RELOAD_State.Joined)  {
+        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO, "Fix Fingers now!");
         /* Add each valid node of the fingertable to the next hop list */
         foreach (FTEntry fte in fingers) {
           /* do we need a new connectivity check? */
@@ -918,15 +920,26 @@ Predecessor cache:";
       m_UsageManager.RegisterUsage(new SipRegistration(m_UsageManager));
       // TODO
       //m_UsageManager.RegisterUsage(new Haw.DisCo.DisCoUsage(m_UsageManager));
+<<<<<<< HEAD
       //m_UsageManager.RegisterUsage(new Haw.DisCo.ShaReUsage(m_UsageManager));
 	  m_UsageManager.RegisterUsage(new RedirServiceProvider(m_UsageManager));
     m_UsageManager.RegisterUsage(new ImageStoreUsage(m_UsageManager));
+=======
+      //m_UsageManager.RegisterUsage(new Haw.DrisCo.ShaReUsage(m_UsageManager));
+	    m_UsageManager.RegisterUsage(new RedirServiceProvider(m_UsageManager));
+      m_UsageManager.RegisterUsage(new CertificateStore(true));
+      m_UsageManager.RegisterUsage(new CertificateStore(false));
+>>>>>>> c72920f5592677c84932e6ebf9afc0acefa648a4
     }
 
     private void BootStrapConfig() {
       if (ReloadConfig.Document != null) {
-        foreach (bootstrapnode bstrnode in ReloadConfig.Document.Overlay.configuration.bootstrapnode)
+#if false //TKTEST IETF
+          foreach (bootstrapnode bstrnode in ReloadConfig.Document.Overlay.configuration.bootstrapnode)
           m_BootstrapServerList.Add(new BootstrapServer(bstrnode.address, bstrnode.port));
+#endif 
+        m_BootstrapServerList.Add(new BootstrapServer("80.153.249.37", 6084));
+
       }
       else {
         if (ReloadGlobals.BootstrapHost != "") {
