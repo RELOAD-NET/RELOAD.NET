@@ -158,26 +158,6 @@ namespace TSystems.RELOAD.Topology {
     }
 
     public AccessController(ReloadConfig rc) {
-<<<<<<< HEAD
-      var ascii = new ASCIIEncoding();
-      m_ReloadConfig = rc;
-      storedPKCs = new Dictionary<string, GenericCertificate>();
-      ACPs = new Dictionary<String, IAccessControlPolicy>();
-      ACPmap = new Dictionary<UInt32, String>();
-      /* Convert My TEIX509Certificate to opaque string*/
-      byte[] certBinary = null;
-      m_ReloadConfig.MyCertificate.SaveToBufferPEM(out certBinary, "");
-      string myCert = ascii.GetString(certBinary);
-      /* SignerIdValue*/
-      var sha256 = new SHA256Managed();
-      byte[] hash = sha256.ComputeHash(ascii.GetBytes(myCert));
-      var signIdVal = new SignerIdentityValue(SignerIdentityType.cert_hash,
-        ReloadGlobals.HashAlg, ascii.GetString(hash));
-      /* Publish my Id and my PKC */
-      var myGenCert = new GenericCertificate(myCert);
-      myIdentity = new SignerIdentity(SignerIdentityType.cert_hash, signIdVal);
-      storedPKCs.Add(ascii.GetString(hash), myGenCert);
-=======
         var ascii = new ASCIIEncoding();
         m_ReloadConfig = rc;
         storedPKCs = new Dictionary<string, GenericCertificate>();
@@ -197,7 +177,6 @@ namespace TSystems.RELOAD.Topology {
         myIdentity = new SignerIdentity(SignerIdentityType.cert_hash, signIdVal);
         string strHash = String.Join(String.Empty, bHash.Select(b => b.ToString("x2")));
         storedPKCs.Add(strHash, myGenCert);
->>>>>>> c72920f5592677c84932e6ebf9afc0acefa648a4
     }
 
     private bool validateCertHash(ReloadMessage msg,
@@ -356,15 +335,10 @@ namespace TSystems.RELOAD.Topology {
 
       /* Store all certificates */
       foreach (GenericCertificate pkc in security_block.Certificates) {
-<<<<<<< HEAD
-        byte[] bHash = sha256.ComputeHash(ascii.GetBytes(pkc.Certificate));
-        string strHash = Encoding.ASCII.GetString(bHash, 0, bHash.Length);
-        certs.Add(strHash, pkc);
-=======
         byte[] bHash = sha256.ComputeHash(pkc.Certificate);
         string strHash = String.Join(String.Empty, bHash.Select(b => b.ToString("x2")));
         certs.Add(strHash, pkc );
->>>>>>> c72920f5592677c84932e6ebf9afc0acefa648a4
+
       }
       SetPKCs(certs);
       string strHash2 = String.Join(String.Empty, signId.Identity.CertificateHash.Select(b => b.ToString("x2")));
@@ -427,7 +401,7 @@ namespace TSystems.RELOAD.Topology {
 
         var signerCert = new TElX509Certificate();
         GenericCertificate gencert = GetPKC(sd.Signature.Identity);
-        byte[] bcert = ascii.GetBytes(gencert.Certificate);
+        byte[] bcert = gencert.Certificate; //TODO: TEST
         signerCert.LoadFromBufferPEM(bcert, "");
         if (!signerCert.ValidateWithCA(m_ReloadConfig.CACertificate)) {
           m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,

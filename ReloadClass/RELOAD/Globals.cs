@@ -65,6 +65,7 @@ namespace TSystems.RELOAD {
     }
 
     public volatile NodeId LocalNodeID = null;
+    public volatile String OverlayName = "";
     public volatile bool DontCheckSSLCert = false;   //enrollment server ssl cert
     public volatile Node LocalNode = null;
     public volatile Node AdmittingPeer = null;
@@ -256,13 +257,10 @@ namespace TSystems.RELOAD {
     public static UInt32 SIP_REGISTRATION_KIND_ID = 1234;
     public static UInt32 DISCO_REGISTRATION_KIND_ID = 4321;
     public static UInt32 ACCESS_LIST_KIND_ID = 3210;
-<<<<<<< HEAD
+
 	  public static UInt32 REDIR_KIND_ID = 104;
-=======
-    public static UInt32 REDIR_KIND_ID = 104;
     public static UInt32 CERTIFICATE_BY_NODE_KIND_ID = 3;
     public static UInt32 CERTIFICATE_BY_USER_KIND_ID = 16; 
->>>>>>> c72920f5592677c84932e6ebf9afc0acefa648a4
 	
     public static bool SelfSignPermitted = false;
     public static readonly DateTime StartOfEpoch = new DateTime(1970, 1, 1);    
@@ -292,6 +290,13 @@ namespace TSystems.RELOAD {
     public static string DNS_Address;
     public static string ConfigurationServer;
     public static string RegKeyIPC = "Software\\T-Systems\\RELOAD";
+    /* Set this value to false, to set a fixed IP for enrollment server 
+ */
+    public static bool UseDNS = false;
+    /* set FixedDNS to true if the DNS ist configured manually, in that case a Webrequest
+     * to a URL resolved by DNS must be translated to IP-Address before!
+     */
+    public static bool FixedDNS = false;
     public static bool ForceLocalConfig = false;
     public static bool DocumentAutoScroll = true;
 
@@ -301,16 +306,9 @@ namespace TSystems.RELOAD {
     public static int DICTIONARY_KEY_LENGTH = 16;
     public static NodeId WildcardNodeId = new NodeId(HexStringConverter.ToByteArray("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"));
 
-<<<<<<< HEAD
-    public static string SBB_LICENSE_SBB7_KEY = "...";
-    public static string SBB_LICENSE_PKI7_KEY = "...";
 
-    public static string SBB_LICENSE_SBB8_KEY = "...";
-    public static string SBB_LICENSE_PKI8_KEY = "...";
-=======
     public static string SBB_LICENSE_SBB8_KEY = "put your (eval) license here";
     //public static string SBB_LICENSE_PKI8_KEY = "put your (eval) license here";
->>>>>>> c72920f5592677c84932e6ebf9afc0acefa648a4
 
     public static int WEB_REQUEST_TIMEOUT = 30000;
     public static int MAX_TLS_SEND_QUEUE_SIZE = 4;
@@ -348,11 +346,8 @@ namespace TSystems.RELOAD {
 
     public static String OverlayName = "implementers.org";//"mp2psip.org, t-reload.realmv6.org";
     /* The 32 bit checksum/hash of the overlay being used */
-<<<<<<< HEAD
-    public static UInt32 OverlayHash = 0x7d171949;
-=======
+
     public static UInt32 OverlayHash = GetHash(OverlayName);
->>>>>>> c72920f5592677c84932e6ebf9afc0acefa648a4
 
     /*enable fragmentation of outgoing packages (only implemented for TLS)*/
     public static bool FRAGMENTATION = false;
@@ -993,11 +988,6 @@ namespace TSystems.RELOAD {
       }
     }
   }
-<<<<<<< HEAD
-=======
-
-
->>>>>>> c72920f5592677c84932e6ebf9afc0acefa648a4
 #if COMPACT_FRAMEWORK
    class File
    {

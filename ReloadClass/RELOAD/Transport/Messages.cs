@@ -421,15 +421,8 @@ namespace TSystems.RELOAD.Transport {
       writer.Write(IPAddress.HostToNetworkOrder((short)0));
       foreach (GenericCertificate pkc in certificates) {
         writer.Write((byte)pkc.Type);
-<<<<<<< HEAD
-        byte[] bcert = ascii.GetBytes(pkc.Certificate);
-        TElX509Certificate cert = new TElX509Certificate();
-        cert.LoadFromBufferPEM(bcert, "");
-        cert.SaveToBuffer(out bcert);
-        ReloadGlobals.WriteOpaqueValue(writer, bcert, 0xFFFF);
-=======
+
         ReloadGlobals.WriteOpaqueValue(writer, pkc.Certificate, 0xFFFF);
->>>>>>> c72920f5592677c84932e6ebf9afc0acefa648a4
       }
       StreamUtil.WrittenBytesShortExcludeLength(posBeforeCerts, writer);
       signature.Dump(writer);
