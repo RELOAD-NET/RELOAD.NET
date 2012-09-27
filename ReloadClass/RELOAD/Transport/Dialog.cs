@@ -187,7 +187,10 @@ namespace TSystems.RELOAD.Transport {
                                 //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Receiver {0} Queuecount {1} Transactionid: {2}", rx_filter.transactionID, m_Queue.Count, reloadMsg.TransactionID));
                                 if (reloadMsg.IsFragmented() && reloadMsg.IsSingleFragmentMessage() == false && rx_filter != null && reloadMsg.TransactionID == rx_filter.transactionID) 
                                 {
-                                    ReloadMessage reassembledMsg = reloadMsg.ReceiveFragmentedMessage(ref fragmentedMessageBuffer);
+                                  ReloadMessage reassembledMsg = null;
+                                  lock (fragmentedMessageBuffer) {
+                                    reassembledMsg = reloadMsg.ReceiveFragmentedMessage(ref fragmentedMessageBuffer);
+                                  }
                                     if (reassembledMsg == null) //not yet all fragments received => not reassembled
                                     {
                                       Arbiter.Activate(m_DispatcherQueue, new IterativeTask<ReloadMessageFilter, int>(rx_filter, rx_timeout, Receive));

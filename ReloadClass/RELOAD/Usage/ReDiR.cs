@@ -26,6 +26,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using TSystems.RELOAD.Utils;
+using System.Threading;
 
 namespace TSystems.RELOAD.Usage {
 
@@ -42,7 +43,7 @@ namespace TSystems.RELOAD.Usage {
 
     public delegate bool DReDiRLookupCompleted(string nameSpace, NodeId serviceProviderID);
 
-    public delegate bool DReDiRLookupFailed(ResourceId resid);
+    public delegate bool DReDiRLookupFailed(string nameSpace);
     
     
     private NodeId m_key;
@@ -53,6 +54,8 @@ namespace TSystems.RELOAD.Usage {
     private Machine machine;
     private STATE status;
 
+    Timer refreshTimer;
+    TimerCallback refresh_callback;
 
     #region Events
 
@@ -73,9 +76,10 @@ namespace TSystems.RELOAD.Usage {
       status = STATE.IDLE;
       this.Lstart = Lstart;
       this.machine = machine;
+      refresh_callback = this.refresh;
     }
 
-    bool redir_FetchCompleted(List<IUsage> usages) {
+    private bool redir_FetchCompleted(List<IUsage> usages) {
       ResourceId resid = null;
       //machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "redir_FetchCompleted usages.Count=" + usages.Count);
       if (usages.Count != 0) {
@@ -117,11 +121,13 @@ namespace TSystems.RELOAD.Usage {
     private void deliverResult(ResourceId resid, string nameSpace, NodeId id) {      
 
       if (nameSpace == null) {
-        ReDiRLookupFailed(resid);
+        if (ReDiRLookupFailed != null)
+          ReDiRLookupFailed(m_nameSpace);
         machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "ReDiR: No Result for " + resid);
       }
       else {
-        ReDiRLookupCompleted(nameSpace, id);
+        if ( ReDiRLookupCompleted != null)
+          ReDiRLookupCompleted(nameSpace, id);
         machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "ReDiR: Result for " + resid + " : nameSpace=" + nameSpace + "ID=" + id.ToString());
       }
 
@@ -143,62 +149,106 @@ namespace TSystems.RELOAD.Usage {
       }
 
       if (status == STATE.LOOKUP) {
-        if (ServiceProviderIDs.Count > 0 && m_currentLevel > 0) {
+        if (ServiceProviderIDs.Count == 0) {
+          machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "REDIR: No Successor found at " + resid);
+          if (m_currentLevel == 0) {
+            machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "REDIR: FAILED " + resid);
+            deliverResult(resid, null, null);
+            status = STATE.IDLE;
+            return;
+          }
+          else {
+            m_currentLevel = m_currentLevel - 1;
+            fetch(m_currentLevel);
+            return;
+          }
+        }
+        else if (ServiceProviderIDs.Count == 1) {
+          NodeId id = ServiceProviderIDs[0];
+          machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "REDIR: Successor found: NodeId=" + id + " at Level = " + m_currentLevel);
+          deliverResult(resid, nameSpace, id);
+          status = STATE.IDLE;
+          return;
+        }
+        else
           ServiceProviderIDs.Sort();
 
-          if (ServiceProviderIDs.Last() < m_key) { // successor of node n is not present in the tree node associated with I(level,n.id) ??
-            machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "successor of node n is not present in the tree node at I(" + m_currentLevel + "," + m_key.ToString() + ")");
-            m_currentLevel = m_currentLevel - 1;
-            deliverResult(resid, null, null);
-            fetch(m_currentLevel);
-          }
-          else if (ServiceProviderIDs.Count > 1 && ServiceProviderIDs.Last() >= m_key && ServiceProviderIDs.First() <= m_key) {
-            machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "sandwiched in I(" + m_currentLevel + "," + m_key.ToString() + ")");
-            m_currentLevel = m_currentLevel + 1;
-            deliverResult(resid, null, null);
-            fetch(m_currentLevel);
-          }
-          else {
-            foreach (NodeId id in ServiceProviderIDs) {
-              machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "REDIR " + id);
-              if (id >= m_key) {
-                machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "REDIR closest successor with NodeID=" + id + " found at Level=" + m_currentLevel);
-                deliverResult(resid, nameSpace, id);
-                status = STATE.IDLE;
-                return;
-              }
-            }
-          }
+        if (ServiceProviderIDs.Count > 1 && ServiceProviderIDs.Last() > m_key && ServiceProviderIDs.First() < m_key) {
+
+          machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "REDIR: sandwiched in I(" + m_currentLevel + "," + m_key.ToString() + ")");
+          m_currentLevel = m_currentLevel + 1;
+          fetch(m_currentLevel);
+          return;
         }
-        else if (m_currentLevel == 0) {
-          if (ServiceProviderIDs.Count > 0) {
-            ServiceProviderIDs.Sort();
-            foreach (NodeId id in ServiceProviderIDs) {
-              machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "REDIR" + id);
-              if (id >= m_key) {
-                machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "REDIR closest successor with NodeID=" + id + " found at Level=" + m_currentLevel);
-                deliverResult(resid, nameSpace, id);
-                status = STATE.IDLE;
-                return;
-              }
-            }
-            machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "REDIR closest successor with NodeID=" + ServiceProviderIDs.First().ToString() + " found at Level=" + m_currentLevel);
-            deliverResult(resid, nameSpace, ServiceProviderIDs.First());
-            status = STATE.IDLE;
-            return;
-          }
-          else {
-            machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "REDIR Nothin");
-            deliverResult(resid, null, null);
-            status = STATE.IDLE;
-            return;
-          }
+        else if (ServiceProviderIDs.Last() == m_key || ServiceProviderIDs.First() == m_key) {
+          NodeId id = ServiceProviderIDs[0];
+          machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "REDIR: Successor found (its me!!!!): NodeId=" + id + " at Level = " + m_currentLevel);
+          deliverResult(resid, nameSpace, id);
+          status = STATE.IDLE;
+          return;
         }
         else {
-          m_currentLevel = m_currentLevel - 1;
-          //deliverResult(resid, null, null);
-          fetch(m_currentLevel);
+          NodeId id = ServiceProviderIDs[0];
+          machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "REDIR: Successor found NodeId=" + id + " at Level = " + m_currentLevel);
+          deliverResult(resid, nameSpace, id);
+
         }
+
+
+        //if (ServiceProviderIDs.Count > 0 && m_currentLevel > 0) {
+        //  ServiceProviderIDs.Sort();
+
+        //  if (ServiceProviderIDs.Last() < m_key) { // successor of node n is not present in the tree node associated with I(level,n.id) ??
+        //    machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "successor of node n is not present in the tree node at I(" + m_currentLevel + "," + m_key.ToString() + ")");
+        //    m_currentLevel = m_currentLevel - 1;
+        //    fetch(m_currentLevel);
+        //  }
+        //  else if (ServiceProviderIDs.Count > 1 && ServiceProviderIDs.Last() >= m_key && ServiceProviderIDs.First() <= m_key) {
+        //    machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "sandwiched in I(" + m_currentLevel + "," + m_key.ToString() + ")");
+        //    m_currentLevel = m_currentLevel + 1;
+        //    fetch(m_currentLevel);
+        //  }
+        //  else {
+        //    foreach (NodeId id in ServiceProviderIDs) {
+        //      machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "REDIR " + id);
+        //      if (id >= m_key) {
+        //        machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "REDIR closest successor with NodeID=" + id + " found at Level=" + m_currentLevel);
+        //        deliverResult(resid, nameSpace, id);
+        //        status = STATE.IDLE;
+        //        return;
+        //      }
+        //    }
+        //  }
+        //}
+        //else if (m_currentLevel == 0) {
+        //  if (ServiceProviderIDs.Count > 0) {
+        //    ServiceProviderIDs.Sort();
+        //    foreach (NodeId id in ServiceProviderIDs) {
+        //      machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "REDIR" + id);
+        //      if (id >= m_key) {
+        //        machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "REDIR closest successor with NodeID=" + id + " found at Level=" + m_currentLevel);
+        //        deliverResult(resid, nameSpace, id);
+        //        status = STATE.IDLE;
+        //        return;
+        //      }
+        //    }
+        //    machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "REDIR closest successor with NodeID=" + ServiceProviderIDs.First().ToString() + " found at Level=" + m_currentLevel);
+        //    deliverResult(resid, nameSpace, ServiceProviderIDs.First());
+        //    status = STATE.IDLE;
+        //    return;
+        //  }
+        //  else {
+        //    machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "REDIR Nothin");
+        //    deliverResult(resid, null, null);
+        //    status = STATE.IDLE;
+        //    return;
+        //  }
+        //}
+        //else {
+        //  m_currentLevel = m_currentLevel - 1;
+        //  //deliverResult(resid, null, null);
+        //  fetch(m_currentLevel);
+        //}
 
       }
       else if (status != STATE.JOINED) {
@@ -231,6 +281,10 @@ namespace TSystems.RELOAD.Usage {
           if (ServiceProviderIDs.Count == 1 && ServiceProviderIDs[0] == m_key) {
             status = STATE.JOINED;
             machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("JOINED REDIR"));
+            if (refreshTimer == null)
+              refreshTimer = new Timer(refresh_callback, null, 60000, 60000);
+            else
+              refreshTimer.Change(60000, 60000);
             return;
           }
 
@@ -238,6 +292,10 @@ namespace TSystems.RELOAD.Usage {
             store(m_currentLevel);
             status = STATE.JOINED;
             machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("JOINED REDIR"));
+            if (refreshTimer == null)
+              refreshTimer = new Timer(refresh_callback, null, 60000, 60000);
+            else
+              refreshTimer.Change(60000, 60000);
             return;
           }
           //check if ServiceProviderID (my ID) is the numerically lowest of highest among the Node-IDs stored under res_id
@@ -252,13 +310,31 @@ namespace TSystems.RELOAD.Usage {
       }
     }
 
+    private void refresh(Object stateInfo) {
+
+      machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("REFRESH: m_currentLevel={0}", m_currentLevel));
+      int nodeNR = responsibleNodeByLevel(m_currentLevel, m_key);
+
+
+
+      status = STATE.DOWNWALK;
+
+      machine.FetchCompleted += new DFetchCompleted(redir_FetchCompleted);
+      machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("machine.FetchCompleted += new DFetchCompleted(redir_FetchCompleted);"));
+      string[] args = new string[] { m_nameSpace + "," + m_currentLevel + "," + nodeNR };
+      machine.GatherCommandsInQueue("Fetch", Usage_Code_Point.REDIR_SERVICE_PROVIDER, 0, null, true, args);
+      machine.SendCommand("Fetch");
+
+    }
+
+
     public bool registerService(string nameSpace) {
       join(machine.Topology.LocalNode.Id, nameSpace);
       return true;
     }
 
     //ReDiR Interface
-    public void join(NodeId id, string nameSpace) {
+    private void join(NodeId id, string nameSpace) {
 
       m_key = id;
       m_currentLevel = Lstart;
@@ -280,27 +356,19 @@ namespace TSystems.RELOAD.Usage {
     }
 
     //ReDiR Interface
-    public bool lookup(NodeId key, string nameSpace) {
+    private bool lookup(NodeId key, string nameSpace) {
       m_key = key;
       m_currentLevel = Lstart;
       m_nameSpace = nameSpace;
 
       status = STATE.LOOKUP;
       machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("machine.FetchCompleted += new DFetchCompleted(redir_FetchCompleted);"));
+      
       machine.FetchCompleted += new DFetchCompleted(redir_FetchCompleted);
       fetch(m_currentLevel);
 
       return true;
     }
-
-    //public bool store(NodeId id, string nameSpace) {
-    //  int nodeNR = responsibleNodeByLevel(Lstart, id);
-
-    //  string[] args = new string[] { "TEST" + "," + Lstart + "," + nodeNR, "TEST", Lstart + "", nodeNR + "" };       //in USAGE verlagern?
-    //  machine.GatherCommandsInQueue("Store", Usage_Code_Point.REDIR_SERVICE_PROVIDER, 0, null, true, args);
-    //  machine.SendCommand("Store");
-    //  return false;
-    //}
 
     #region private
 
@@ -332,13 +400,13 @@ namespace TSystems.RELOAD.Usage {
       int i = 0;
 
       do {
-        if (level == 0)
-          break; //only one node at level 0
+        //if (level == 0)
+        //  break; //only one node at level 0
 
         NodeId temp = (max) >> (level);
         upperbound = upperbound + ((temp)) + 1;
 
-        if (id < upperbound)
+        if (id < upperbound || upperbound==(new NodeId()).Min())//upperbound==(new NodeId()).Min() for level 0 and last node at level where upperbound overflows to 0
           break;
 
         i++;

@@ -21,6 +21,7 @@
 * Last edited by: Alex <alexander.knauf@gmail.com>
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+//#define IETF83_ENROLL
 
 using System;
 using System.Collections.Generic;
@@ -73,8 +74,8 @@ namespace TSystems.RELOAD.Enroll {
         public ReloadConfigResolve(ReloadConfig reloadConfig) {
             m_ReloadConfig = reloadConfig;
 
-            SBUtils.Unit.SetLicenseKey(ReloadGlobals.SBB_LICENSE_SBB8_KEY);
-            SBUtils.Unit.SetLicenseKey(ReloadGlobals.SBB_LICENSE_PKI8_KEY);
+            SBUtils.Unit.SetLicenseKey(ReloadGlobals.SBB_LICENSE_SBB7_KEY);
+            SBUtils.Unit.SetLicenseKey(ReloadGlobals.SBB_LICENSE_PKI7_KEY);
         }
 
         public string EnrollmentUrl {
@@ -155,8 +156,13 @@ namespace TSystems.RELOAD.Enroll {
 #if COMPACT_FRAMEWORK
                     DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, String.Format("_p2psip_enroll._tcp.{0}", OverlayName), PocketDnDns.Enums.NsType.SRV, PocketDnDns.Enums.NsClass.INET, ProtocolType.Udp);
 #else
+
+#if IETF83_ENROLL
+                    DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, String.Format("_p2psip-enroll._tcp.{0}", OverlayName), DnDns.Enums.NsType.SRV, DnDns.Enums.NsClass.INET, ProtocolType.Udp);  //--IETF
+#else
                     DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, String.Format("_p2psip_enroll._tcp.{0}", OverlayName), DnDns.Enums.NsType.SRV, DnDns.Enums.NsClass.INET, ProtocolType.Udp);  //--joscha
-                    //DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, String.Format("enroll.{0}", OverlayName), DnDns.Enums.NsType.A, DnDns.Enums.NsClass.INET, ProtocolType.Udp);
+#endif
+
 #endif
                     if (dnsResponse != null)
                         foreach (IDnsRecord record in dnsResponse.Answers) {
@@ -169,7 +175,11 @@ namespace TSystems.RELOAD.Enroll {
                                     string enrollment_url = lines2[1].TrimEnd('.');
 
                                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO, String.Format("DNS SRV lookup returned: https://{0}", enrollment_url));
+#if IETF83_ENROLL
+                                    return String.Format("https://{0}/.well-known/p2psip-enroll", enrollment_url);
+#else
                                     return String.Format("https://{0}/p2psip/enroll/", enrollment_url);
+#endif
                                 }
                             }
                         }
@@ -212,7 +222,7 @@ namespace TSystems.RELOAD.Enroll {
 #if IETF80_ENROLL
 //              enrollment_url = "http://130.129.20.69/.well-known/p2psip-enroll";
 //              enrollment_url = "http://67.202.107.163/.well-known/p2psip-enroll";
-                enrollment_url = "http://[2607:f128:42:be::2]/.well-known/p2psip-enroll";
+                enrollment_url = "https://173.246.102.69/.well.known/p2psip-enroll";
 
 #else
                 int iRetries = 3;
@@ -499,7 +509,7 @@ namespace TSystems.RELOAD.Enroll {
 #else
             //TESTTEST
             //sLocalCertFilename = "262017430126003";
-#if IETF80_ENROLL
+#if IETF83_ENROLL
             string pem_file = sLocalCertFilename + ".der";
 #else
             string pem_file = sLocalCertFilename + ".pem";
@@ -543,8 +553,8 @@ namespace TSystems.RELOAD.Enroll {
                     FRequest.Subject.set_Values(4, SBUtils.Unit.BytesOfString("R&D"));
                     FRequest.Subject.set_OIDs(5, SBUtils.Unit.SB_CERT_OID_COMMON_NAME);
 
-#if IETF80_ENROLL
-                    FRequest.Subject.set_Values(5, SBUtils.Unit.BytesOfString("thomas"));
+#if IETF83_ENROLL
+                    FRequest.Subject.set_Values(5, SBUtils.Unit.BytesOfString("Joscha"));
 #else
                     FRequest.Subject.set_Values(5, SBUtils.Unit.BytesOfString(m_ReloadConfig.IMSI == "" ? "VNODE" : "IMSI:" + m_ReloadConfig.IMSI));
 #endif
@@ -552,7 +562,7 @@ namespace TSystems.RELOAD.Enroll {
                                       2048,
                                       SBUtils.Unit.SB_CERT_ALGORITHM_SHA1_RSA_ENCRYPTION);
 
-#if IETF80_ENROLL
+#if IETF83_ENROLL
                     FRequest.SaveToBuffer(out pemCSR);
 #else
                     FRequest.SaveToBufferPEM(out pemCSR);
@@ -578,8 +588,8 @@ namespace TSystems.RELOAD.Enroll {
                     HttpWebRequest httpWebPost;
 
                     /* get node id and sip url */
-#if IETF80_ENROLL
-                    httpWebPost = (HttpWebRequest)WebRequest.Create(new Uri(enrollment_url + "?username=thomas&password=password&count=1"));
+#if IETF83_ENROLL
+                    httpWebPost = (HttpWebRequest)WebRequest.Create(new Uri("https://implementers.org/enrollment?username=Joscha&password=password&count=1"));
 #else
                     httpWebPost = (HttpWebRequest)WebRequest.Create(new Uri(enrollment_url));
 #endif
@@ -601,7 +611,7 @@ namespace TSystems.RELOAD.Enroll {
                      * -----END CERTIFICATE REQUEST-----
                      */
 
-#if IETF80_ENROLL
+#if IETF83_ENROLL
                     //httpWebPost.TransferEncoding = "binary";
                     BinaryWriter writer = new BinaryWriter(httpWebPost.GetRequestStream());
                     writer.Write(pemCSR);
@@ -619,18 +629,22 @@ namespace TSystems.RELOAD.Enroll {
                     try {
                         httpPostResponse = (HttpWebResponse)httpWebPost.GetResponse();
                     }
-                    catch {
-                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "HTTP error");
+                    catch (Exception ex){
+                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "HTTP error " + ex.Message);
                     }
 
                     TElX509Certificate cert = new TElX509Certificate();
 
                     // TEST
                     byte[] signedCert = ReloadGlobals.ConvertNonSeekableStreamToByteArray(httpPostResponse.GetResponseStream());
+#if IETF83_ENROLL
+                    cert.LoadFromBuffer(signedCert);
+#else
                     if (httpWebPost.TransferEncoding != "binary")
                         cert.LoadFromBufferPEM(signedCert, "");
                     else
                         cert.LoadFromBuffer(signedCert);
+#endif
 
                     if (privateKey != null) {
                         cert.LoadKeyFromBuffer(privateKey);

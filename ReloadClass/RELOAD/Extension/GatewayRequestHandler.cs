@@ -62,50 +62,69 @@ namespace TSystems.RELOAD.Extension {
     }
 
     public abstract class Request {
-
-      public string[] args;
-      public Usage_Code_Point CodePoint;
+      protected Usage_Code_Point CodePoint;
+      protected int type;
+      protected string[] args;
+      
       protected Machine machine;
 
       public string DestinationOverlay = null;
 
-      public Request(Machine machine, string resourcename=null, Usage_Code_Point codePoint=0) {
-        this.args = new string[] { resourcename };
-        this.CodePoint = codePoint;
+      public Request(Machine machine, Usage_Code_Point codePoint = 0, int type=0, string[] args = null) {
         this.machine = machine;
+        this.CodePoint = codePoint;
+        this.type = type;
+        this.args = args;
       }
 
       public abstract void fire(string nameSpace, NodeId id);
-
     }
 
     public class FetchRequest : Request {
 
-      public FetchRequest(Machine machine, string resourcename, Usage_Code_Point codePoint)
-        : base(machine, resourcename, codePoint) {
+      public FetchRequest(Machine machine, Usage_Code_Point codePoint = 0, int type=0, string[] args = null)
+        : base(machine, codePoint, type, args) {
       }
 
       public override void fire(string nameSpace, NodeId id)    //TODO: name
       {
         machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "GatewayRequestHandler: Fetch via " + nameSpace);
 
-        machine.GatherCommandsInQueue("Fetch", this.CodePoint, 0, id, true, this.args);
+        machine.GatherCommandsInQueue("Fetch", this.CodePoint, type, id, true, this.args);
         machine.SendCommand("Fetch");
       }
     }
 
     public class StoreRequest : Request {
 
-      public StoreRequest(Machine machine, string resourcename, Usage_Code_Point codePoint)
-        : base(machine, resourcename, codePoint) {
+      public StoreRequest(Machine machine, Usage_Code_Point codePoint = 0, int type=0, string[] args = null)
+        : base(machine, codePoint, type, args) {
       }
+
 
       public override void fire(string nameSpace, NodeId id)    //TODO: name
       {
         machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "GatewayRequestHandler: Store via " + nameSpace);
 
-        machine.GatherCommandsInQueue("Store", this.CodePoint, 0, id, true, this.args);
+        machine.GatherCommandsInQueue("Store", this.CodePoint, this.type, id, true, this.args);
         machine.SendCommand("Store");
+      }
+    }
+
+    public class AppAttachRequest : Request {
+
+      string destination_overlay;
+      Destination dest;
+      public AppAttachRequest(Machine machine, Destination dest, string destination_overlay)
+        : base(machine) {
+          this.destination_overlay = destination_overlay;
+          this.dest = dest;
+      }
+
+      public override void fire(string nameSpace, NodeId id)    //TODO: name
+      {
+        Arbiter.Activate(machine.ReloadConfig.DispatcherQueue, new IterativeTask<Destination, NodeId, String>
+          (dest, id, destination_overlay, machine.Transport.AppAttachProcedure));
       }
     }
 
@@ -121,36 +140,6 @@ namespace TSystems.RELOAD.Extension {
       public override void fire(string nameSpace, NodeId id)    //TODO: name
       {
         machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "GatewayRequestHandler: Forward via Gateway " + id + " into " + nameSpace);
-
-        Node NextHopNode = machine.Topology.routing_table.FindNextHopTo(id, true, false);       //TODO: (id, true, true)?
-        machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("1 GatewayRequestHandler: fire: via_list"));
-        if (msg.forwarding_header.via_list != null) {
-          foreach (Destination destx in msg.forwarding_header.via_list)
-            machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Via={0} ", destx.ToString()));
-        }
-        machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("1 GatewayRequestHandler: fire: destination_list"));
-        if (msg.forwarding_header.destination_list != null) {
-          foreach (Destination desty in msg.forwarding_header.destination_list)
-              machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Dest={0} ", desty.ToString()));
-        }
-        if (msg.forwarding_header.via_list == null)
-          msg.forwarding_header.via_list = new List<Destination>();
-        msg.AddViaHeader(this.machine.Topology.LocalNode.Id);
-        //if (msg.forwarding_header.destination_list[0].type == DestinationType.node && msg.forwarding_header.destination_list[0].destination_data.node_id == machine.Topology.LocalNode.Id) { //TODO immer ressource id oder auch manchmal node id?
-        //if (machine is GWMachine)
-        //  ((GWMachine)machine).GateWay.mainPeer.ReloadConfig.OverlayName == msg.forwarding_header.fw_options.tr
-        //msg.forwarding_header.destination_list[0] = new Destination(id);
-        //  machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("AUS HOMEOVERLAY nach INTERDOMAIN!"));
-        //}
-        //else {
-        //  machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("????????????????????????????"));
-       // }
-        //msg.forwarding_header.destination_list.Insert(0,new Destination(id));
-        //else if (msg.forwarding_header.destination_list[0].type == DestinationType.resource && msg.forwarding_header.destination_list[0].destination_data.ressource_id == machine.Topology.LocalNode.Id)
-        //  msg.forwarding_header.destination_list[0] = new Destination(id);
-        //else
-        //  machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-
         msg.forwarding_header.destination_list.Insert(0, new Destination(id)); 
         //---------------DEBUG
         machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("2 GatewayRequestHandler: fire: via_list"));
@@ -164,11 +153,7 @@ namespace TSystems.RELOAD.Extension {
               machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Dest={0} ", desty.ToString()));
         }
         //---------------DEBUG
-
-        //set the LastHopNodeId to the NodeId of the intraDomainPeer
-        msg.LastHopNodeId = machine.Topology.Id;
-        //and send...
-        machine.Transport.send(msg, NextHopNode);
+        machine.Transport.receive_message(msg);
       }
     }
 
@@ -184,7 +169,6 @@ namespace TSystems.RELOAD.Extension {
 
 
     bool redir_LookupCompleted(string nameSpace, NodeId id) {
-
       machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "redir_LookupCompleted: " + " nameSpace: " + nameSpace + " NodeId: " + id);
 
       while (RequestQueue[nameSpace].Count > 0) {
@@ -196,45 +180,39 @@ namespace TSystems.RELOAD.Extension {
       return true;
     }
 
-    bool redir_LookupFailed(ResourceId resid) {
-
-      machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "redir_LookupFailed: ResourceId: " + resid);
+    bool redir_LookupFailed(string nameSpace) {
+      machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "redir_LookupFailed: " + " nameSpace: " + nameSpace);
+      RequestQueue[nameSpace].Clear();
 
       return true;
     }
 
-    public void storeVia(string NameSpace, string resourcename, Usage_Code_Point codePoint) {
 
-      StoreRequest req = new StoreRequest(machine, resourcename, codePoint);
+    public void forwardVia(string NameSpace, ReloadMessage message) {
 
-      if (gateWayCache.ContainsKey(NameSpace) == true) {
-        req.fire(NameSpace, gateWayCache[NameSpace]);
-      }
-      else {
-        RequestQueue[NameSpace].Enqueue(req);
-        ReDiRNode.lookupService(NameSpace);
-      }
-    }
+      machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "GatewayRequestHandler: going to forward form to ServiceProvider" + NameSpace);
 
-    public void forward(string from_overlay, string to_overlay, ReloadMessage message) {
-
-      machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "GatewayRequestHandler: going to forward form " + from_overlay + " into " + to_overlay);
-
+      message.security_block = new SecurityBlock(machine.ReloadConfig, machine.ReloadConfig.AccessController.MyIdentity);
+      message.security_block.SignMessage(ReloadGlobals.OverlayHash, //TODO: remove overlayhash from glals
+       message.TransactionID.ToString(), message.reload_message_body);
+      machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, message.reload_message_body.RELOAD_MsgCode.ToString() + " resigned (new SecurityBlock)");
+      
       ForwardRequest req = new ForwardRequest(machine, message);
 
-      if (gateWayCache.ContainsKey(to_overlay) == true) {
-        req.fire(to_overlay, gateWayCache[to_overlay]);
+      if (gateWayCache.ContainsKey(NameSpace) == true) {
+        req.fire(NameSpace, gateWayCache[NameSpace]);
       }
       else {
-        RequestQueue[to_overlay].Enqueue(req);
-        machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "GatewayRequestHandler: starting lookupService for " + to_overlay + "...");
-        ReDiRNode.lookupService(to_overlay);
+        RequestQueue[NameSpace].Enqueue(req);
+        machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "GatewayRequestHandler: starting lookupService for " + NameSpace + "...");
+        ReDiRNode.lookupService(NameSpace);
       }
     }
 
-    public void fetchVia(string NameSpace, string resourcename, Usage_Code_Point codePoint) {
 
-      FetchRequest req = new FetchRequest(machine, resourcename, codePoint);
+    public void fetchVia(string NameSpace,  Usage_Code_Point codePoint, int type, string [] args) {
+
+      FetchRequest req = new FetchRequest(machine, codePoint, type, args);
 
       if (gateWayCache.ContainsKey(NameSpace) == true) {
         req.fire(NameSpace, gateWayCache[NameSpace]);
@@ -245,11 +223,25 @@ namespace TSystems.RELOAD.Extension {
       }
     }
 
-    public void appAttachVia(string NameSpace, Destination dest, String DestinationOverlay) {
+    public void storeVia(string NameSpace, Usage_Code_Point codePoint, int type, string[] args) {
+
+      StoreRequest req = new StoreRequest(machine, codePoint, type, args);
 
       if (gateWayCache.ContainsKey(NameSpace) == true) {
-        Arbiter.Activate(machine.ReloadConfig.DispatcherQueue, new IterativeTask<Destination, NodeId, String>
-          (dest, gateWayCache[NameSpace], DestinationOverlay, machine.Transport.AppAttachProcedure));
+        req.fire(NameSpace, gateWayCache[NameSpace]);
+      }
+      else {
+        RequestQueue[NameSpace].Enqueue(req);
+        ReDiRNode.lookupService(NameSpace);
+      }
+    }
+
+    public void appAttachVia(string NameSpace, Destination dest, string DestinationOverlay) {
+
+      AppAttachRequest req = new AppAttachRequest(machine, dest, DestinationOverlay);
+
+      if (gateWayCache.ContainsKey(NameSpace) == true) {
+        req.fire(NameSpace,gateWayCache[NameSpace]);
       }
       else {
         ReDiRNode.lookupService(NameSpace);

@@ -33,14 +33,20 @@ using TSystems.RELOAD.Topology;
 namespace TSystems.RELOAD.Extension {
   public class GateWay {
     public GWMachine mainPeer;
-    public GWMachine intraDomainPeer;
+    public GWMachine interDomainPeer;
 
-    private ReDiR redirMainNode;
-    private ReDiR redirintraDomainNode;
+    private ReDiR ReDiRMainNode;
+    private ReDiR ReDiRinterDomainNode;
 
     private GatewayRequestHandler gwRequestHandler;
+    
+    //maps TransactionId to ResourceId needed for signature verification!
+    //TransactionId's are recorded for every FetchRequest
+    private Dictionary<ulong, ResourceId> fetchIdMap = null;
 
-    private System.Timers.Timer joinedTimer;
+
+    public delegate void DInterdomainMessageProcessed(string destination_overlay, bool destination_reached);
+    public event DInterdomainMessageProcessed InterdomainMessageProcessed;
 
     //private Dictionary<string, ReloadMessage> forwardBuffer = new Dictionary<string,ReloadMessage>();
     //Buffer for Messages which needs to be forwarded but the responsible GateWay is unknown
@@ -49,171 +55,143 @@ namespace TSystems.RELOAD.Extension {
     void machineMain_StateUpdate(ReloadConfig.RELOAD_State state) {
 
       if (state == ReloadConfig.RELOAD_State.Configured && mainPeer.ReloadConfig.IsBootstrap == true)
-        redirMainNode.registerService("GATEWAYNODE");
+        ReDiRMainNode.registerService("GATEWAYNODE");
 
       if (state == ReloadConfig.RELOAD_State.Joined)
-        redirMainNode.registerService("GATEWAYNODE");
+        ReDiRMainNode.registerService("GATEWAYNODE");
 
     }
 
     void machineIntraDomain_StateUpdate(ReloadConfig.RELOAD_State state) {
 
       if (state == ReloadConfig.RELOAD_State.Configured && mainPeer.ReloadConfig.IsBootstrap == true)
-        redirintraDomainNode.registerService(mainPeer.ReloadConfig.OverlayName);
+        ReDiRinterDomainNode.registerService(mainPeer.ReloadConfig.OverlayName);
 
       if (state == ReloadConfig.RELOAD_State.Joined)
-        redirintraDomainNode.registerService(mainPeer.ReloadConfig.OverlayName);
+        ReDiRinterDomainNode.registerService(mainPeer.ReloadConfig.OverlayName);
 
     }
 
-    public GateWay(GWMachine mainPeer, GWMachine intraDomainPeer) {
-      gwRequestHandler = new GatewayRequestHandler(intraDomainPeer);
+    public GateWay(GWMachine mainPeer, GWMachine interDomainPeer) {
+
+      fetchIdMap = new Dictionary<ulong, ResourceId>();
+
+      gwRequestHandler = new GatewayRequestHandler(interDomainPeer);
 
       this.mainPeer = mainPeer;
       mainPeer.GateWay = this;
 
-      redirMainNode = new ReDiR(mainPeer);
-      //redirMainNode.ReDiRLookupCompleted += redir_LookupCompleted;
-      //redirMainNode.ReDiRLookupFailed += redirMainNode_LookupFailed;
-      mainPeer.StateUpdates += machineMain_StateUpdate;
-      
-      this.intraDomainPeer = intraDomainPeer;
-      intraDomainPeer.GateWay = this;
+      ReDiRMainNode = new ReDiR(mainPeer);
 
-      redirintraDomainNode = new ReDiR(intraDomainPeer);
-      //redirintraDomainNode.ReDiRLookupCompleted += redir_LookupCompleted;
-      //redirintraDomainNode.ReDiRLookupFailed += redirIntraDomain_LookupFailed;
-      intraDomainPeer.StateUpdates += machineIntraDomain_StateUpdate;
+      mainPeer.StateUpdates += machineMain_StateUpdate;
+
+      this.interDomainPeer = interDomainPeer;
+      interDomainPeer.GateWay = this;
+
+      ReDiRinterDomainNode = new ReDiR(interDomainPeer);
+
+      interDomainPeer.StateUpdates += machineIntraDomain_StateUpdate;
     }
 
     bool redirIntraDomain_LookupFailed(ResourceId resid) {
 
-      intraDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "intraDomainPeer redir_LookupFailed: ResourceId: " + resid);
+      interDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "interDomainPeer redir_LookupFailed: ResourceId: " + resid);
 
       return true;
     }
 
-    bool redirMainNode_LookupFailed(ResourceId resid) {
+    bool ReDiRMainNode_LookupFailed(ResourceId resid) {
 
       mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "mainPeer redir_LookupFailed: ResourceId: " + resid);
 
       return true;
     }
 
-    //TODO: delete no longer used
-    private bool redir_LookupCompleted(string nameSpace, NodeId id) //use nameSpace to verify callback TODO:
-    {
-
-      intraDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "intraDomainPeer Ausgang gefunden: " + id.ToString());
-
-      ReloadMessage message = null;
-
-      if (!forwardBuffer.ContainsKey(nameSpace)) {
-        throw new System.Exception(String.Format("ReDiR Result for {0} but no Request! This should not happen!", nameSpace));
-      }
-      else
-        message = forwardBuffer[nameSpace].Dequeue();
-
-      Node NextHopNode = intraDomainPeer.Topology.routing_table.FindNextHopTo(id, true, false);       //TODO: (id, true, true)?
-
-      if (message.forwarding_header.destination_list[0].type == DestinationType.node &&
-          message.forwarding_header.destination_list[0].destination_data.node_id == mainPeer.Topology.LocalNode.Id) //TODO immer ressource id oder auch manchmal node id?
-        message.forwarding_header.destination_list[0] = new Destination(id);
-      else if (message.forwarding_header.destination_list[0].type == DestinationType.resource &&
-          message.forwarding_header.destination_list[0].destination_data.ressource_id == mainPeer.Topology.LocalNode.Id)
-        message.forwarding_header.destination_list[0] = new Destination(id);
-      else
-        mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-
-      //message.forwarding_header.destination_list.Insert(0,new Destination(id)); 
-      //---------------DEBUG
-      if (message.forwarding_header.via_list != null) {
-        foreach (Destination destx in message.forwarding_header.via_list)
-          intraDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Via={0} ", destx.ToString()));
-      }
-      if (message.forwarding_header.destination_list != null) {
-        foreach (Destination desty in message.forwarding_header.destination_list)
-          if (desty.type != DestinationType.node || message.forwarding_header.destination_list.Count > 1)
-            intraDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Dest={0} ", desty.ToString()));
-      }
-      //---------------DEBUG
-
-      //set the LastHopNodeId to the NodeId of the intraDomainPeer
-      message.LastHopNodeId = intraDomainPeer.Topology.Id;
-      //and send...
-      intraDomainPeer.Transport.send(message, NextHopNode);
-
-      return true;
-    }
-
     public void start() {
       mainPeer.StartWorker();
-      intraDomainPeer.StartWorker();
+      interDomainPeer.StartWorker();
     }
 
-    public void Receive(string source_overlay, ReloadMessage message) {
-      mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "GATEWAY: RECEIVE im ZIELOVERLAY");
+    public void response_processed(bool destination_reached) {
 
-      //---------------DEBUG
-      mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("via_list before"));
-      if (message.forwarding_header.via_list != null) {
-        foreach (Destination destx in message.forwarding_header.via_list)
-          mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Via={0} ", destx.ToString()));
-      }
-      mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("destination_list before"));
-      if (message.forwarding_header.destination_list != null) {
-        foreach (Destination desty in message.forwarding_header.destination_list)
-          mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Dest={0} ", desty.ToString()));
-      }
-      //---------------DEBUG
+      if (InterdomainMessageProcessed != null)
+        InterdomainMessageProcessed("RESPONSE", destination_reached);
 
-      if (message.forwarding_header.destination_list[0].type == DestinationType.node &&
-          message.forwarding_header.destination_list[0].destination_data.node_id == intraDomainPeer.Topology.LocalNode.Id)
-        message.forwarding_header.destination_list[0] = new Destination(mainPeer.Topology.LocalNode.Id);
+    }
+
+    public void Receive(string destination_overlay, ReloadMessage reloadMsg) {
+
+      if ((reloadMsg.reload_message_body.RELOAD_MsgCode == RELOAD_MessageCode.Fetch_Request)) {
+        FetchReq req = (FetchReq)reloadMsg.reload_message_body;
+
+        fetchIdMap[reloadMsg.TransactionID] = req.ResourceId;
+        mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, "GW: Fetch_Request: " + reloadMsg.TransactionID + " ResId: " + req.ResourceId);
+      }
+
+      if (mainPeer.ReloadConfig.OverlayName == destination_overlay) {
+
+        interDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, String.Format("Message received by GateWayPeer"));
+        mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, "GATEWAY: RECEIVE");
+        if (reloadMsg.forwarding_header.via_list == null)
+          reloadMsg.forwarding_header.via_list = new List<Destination>();
+        //reloadMsg.AddViaHeader(interDomainPeer.Topology.LocalNode.Id);
+
+        //---------------DEBUG
+        mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, String.Format("via_list"));
+        if (reloadMsg.forwarding_header.via_list != null) {
+          foreach (Destination destx in reloadMsg.forwarding_header.via_list)
+            mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, String.Format("    Via={0} ", destx.ToString()));
+        }
+        mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, String.Format("destination_list"));
+        if (reloadMsg.forwarding_header.destination_list != null) {
+          foreach (Destination desty in reloadMsg.forwarding_header.destination_list)
+            mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, String.Format("    Dest={0} ", desty.ToString()));
+        }
+        //---------------DEBUG
+        mainPeer.Inject(reloadMsg);
+        if (InterdomainMessageProcessed != null)
+          InterdomainMessageProcessed(destination_overlay, true);
+
+      }
       else {
 
-      }
-      
-      //---------------DEBUG
-      mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("via_list after"));
-      if (message.forwarding_header.via_list != null) {
-        foreach (Destination destx in message.forwarding_header.via_list)
-          mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Via={0} ", destx.ToString()));
-      }
-      mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("destination_list after"));
-      if (message.forwarding_header.destination_list != null) {
-        foreach (Destination desty in message.forwarding_header.destination_list)
-            mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("    Dest={0} ", desty.ToString()));
-      }
-      //---------------DEBUG
+        //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("Message: source_overlay " + source_overlay + " destination_overlay " + destination_overlay));
+        interDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, "GATEWAY: SEND into " + destination_overlay);
+        if (reloadMsg.forwarding_header.via_list == null)
+          reloadMsg.forwarding_header.via_list = new List<Destination>();
+        //reloadMsg.AddViaHeader(mainPeer.Topology.LocalNode.Id);
 
-      mainPeer.Inject(source_overlay, message);
-    }
-
-    public void Send(string from_overlay, string to_overlay, ReloadMessage message) {
-
-      intraDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "SUCHE ZIEL " + to_overlay + " IM INTRADOMAIN OVERLAY");
-      //Request from mainOverlay in interdomainOverlay: FirstDestEntry is MainPeerNodeId
-    //  if (message.IsRequest()) {
-    //    if (message.forwarding_header.destination_list[0].type == DestinationType.node &&
-    //message.forwarding_header.destination_list[0].destination_data.node_id != mainPeer.Topology.LocalNode.Id) {
-
-    //    }
-    //    message.RemoveFirstDestEntry();
-
-    //  }
-    //  else if (message.forwarding_header.destination_list[0].type == DestinationType.node &&
-    //message.forwarding_header.destination_list[0].destination_data.node_id != mainPeer.Topology.LocalNode.Id) {
-
-    //  }
-    //  else 
-        if (message.forwarding_header.destination_list[0].type == DestinationType.node &&
-            message.forwarding_header.destination_list[0].destination_data.node_id == mainPeer.Topology.LocalNode.Id) {
-              message.RemoveFirstDestEntry();
+        //---------------DEBUG
+        interDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("via_list"));
+        if (reloadMsg.forwarding_header.via_list != null) {
+          foreach (Destination destx in reloadMsg.forwarding_header.via_list)
+            interDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, String.Format("    Via={0} ", destx.ToString()));
         }
-      
-      gwRequestHandler.forward(from_overlay, to_overlay, message);
+        interDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, String.Format("destination_list"));
+        if (reloadMsg.forwarding_header.destination_list != null) {
+          foreach (Destination desty in reloadMsg.forwarding_header.destination_list)
+            interDomainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, String.Format("    Dest={0} ", desty.ToString()));
+        }
+        //---------------DEBUG
 
+        //reloadMsg.LastHopNodeId = interDomainPeer.Topology.Id;  //Why
+
+        gwRequestHandler.forwardVia(destination_overlay, reloadMsg);
+        if (InterdomainMessageProcessed != null)
+          InterdomainMessageProcessed(destination_overlay, false);
+      }
     }
+
+    public ResourceId getResIdforTransactionId(ulong TransactionId) {
+      ResourceId res_id = fetchIdMap[TransactionId];
+      mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, "GW: get: " + TransactionId);
+      return res_id;
+    }
+
+    public void removeResIdforTransactionId(ulong TransactionId) {
+      mainPeer.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, "GW: remove: " + TransactionId);
+      fetchIdMap.Remove(TransactionId);
+    }
+
   }
 }

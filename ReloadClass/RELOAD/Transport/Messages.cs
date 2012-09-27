@@ -144,7 +144,7 @@ namespace TSystems.RELOAD.Transport {
     public ResourceId ressource_id;
   }
 
-  
+
 
   /// <summary>
   /// In response to a successful Store request the peer MUST return a
@@ -160,7 +160,7 @@ namespace TSystems.RELOAD.Transport {
     public List<NodeId> replicas;
   }
 
-  
+
 
   /// <summary>
   /// The FetchAns structure contains a series of FetchKindResponse
@@ -424,7 +424,7 @@ namespace TSystems.RELOAD.Transport {
         writer.Write((byte)pkc.Type);
         byte[] bcert = ascii.GetBytes(pkc.Certificate);
         TElX509Certificate cert = new TElX509Certificate();
-        cert.LoadFromBufferPEM(bcert,"");
+        cert.LoadFromBufferPEM(bcert, "");
         cert.SaveToBuffer(out bcert);
         ReloadGlobals.WriteOpaqueValue(writer, bcert, 0xFFFF);
       }
@@ -488,7 +488,20 @@ namespace TSystems.RELOAD.Transport {
     }
 
     public NodeId OriginatorID {
-      get { return security_block.OriginatorNodeID; }
+      //get { return security_block.OriginatorNodeID; }
+      get {
+        if (forwarding_header.via_list != null && forwarding_header.via_list.Count > 0) {
+          if (security_block.OriginatorNodeID != (forwarding_header.via_list.First()).destination_data.node_id)
+          {
+
+          }
+          return (forwarding_header.via_list.First()).destination_data.node_id;
+        }
+        else {
+          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "security_block.OriginatorNodeID!!!!!!!!!!!!!!!!!!!!!!!!");
+          return security_block.OriginatorNodeID;
+        }
+      }
     }
 
     public bool IsRequest() {
@@ -524,6 +537,9 @@ namespace TSystems.RELOAD.Transport {
 
       reload_message_body = reload_content;
 
+      forwarding_header.via_list = new List<Destination>();
+      forwarding_header.via_list.Add(new Destination(OriginatorNodeID));
+
       forwarding_header.destination_list = new List<Destination>();
       forwarding_header.destination_list.Add(destination);
       SignerIdentity myId = m_ReloadConfig.AccessController.MyIdentity;
@@ -552,6 +568,7 @@ namespace TSystems.RELOAD.Transport {
 
     public bool PutViaListToDestination(ReloadMessage rmDest) {
       if (forwarding_header.via_list != null) {
+        forwarding_header.via_list.Remove(forwarding_header.via_list.First());
         //this function assumes that the final destination already set to destination list
         foreach (Destination dest in forwarding_header.via_list) {
           //using index 0 will actually reverse the via list items, which is required see "3.3. Routing"
@@ -569,7 +586,7 @@ namespace TSystems.RELOAD.Transport {
           //using index 0 will actually reverse the via list items, which is required see "3.3. Routing"
           forwarding_header.destination_list.Insert(0, dest);
         }
-        forwarding_header.via_list.Clear();
+        //forwarding_header.via_list.Clear();
       }
       return true;
     }
@@ -592,7 +609,7 @@ namespace TSystems.RELOAD.Transport {
     /// <param name="fragmentedMessageBuffer">reference to a buffer for MessageFragments</param>
     /// <returns name="fullmessage">Return reassembled Message in case all fragments have been received. Otherwise return value is null.</returns>
     public ReloadMessage ReceiveFragmentedMessage(ref Dictionary<ulong, SortedDictionary<UInt32, MessageFragment>> fragmentedMessageBuffer) {
-      
+
       try {
 
         MessageFragment fragment = (MessageFragment)reload_message_body;
@@ -610,7 +627,7 @@ namespace TSystems.RELOAD.Transport {
         fragmentedMessageBuffer[TransactionID][fragment.Offset] = fragment;
 
         if (fragmentedMessageBuffer[TransactionID].Count >= 2) {  //check if all fragments have been received
-                        
+
           SortedDictionary<UInt32, MessageFragment> dict = fragmentedMessageBuffer[TransactionID];    //sort after fragmentation offset
 
           if (dict.First().Value.Offset != 0)
@@ -687,7 +704,8 @@ namespace TSystems.RELOAD.Transport {
           m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FRAGMENTATION, String.Format("Message reassembled: Length={0}", ms.Length));
 
           long bytesProcessed = 0;
-          ReloadMessage fullMsg = new ReloadMessage(m_ReloadConfig).FromBytes(ms.ToArray(), ref bytesProcessed, ReloadMessage.ReadFlags.full);
+          byte[] temp = ms.ToArray();
+          ReloadMessage fullMsg = new ReloadMessage(m_ReloadConfig).FromBytes(temp, ref bytesProcessed, ReloadMessage.ReadFlags.full);
           fullMsg.LastHopNodeId = this.LastHopNodeId;
 
           return fullMsg;
@@ -893,8 +911,8 @@ namespace TSystems.RELOAD.Transport {
         uint offset = 0;
         MemoryStream ms = new MemoryStream();
 
-        long test = 0;
-        ReloadMessage hmmm = new ReloadMessage(m_ReloadConfig).FromBytes(message, ref test, ReadFlags.full);
+        //long test = 0;
+        //ReloadMessage hmmm = new ReloadMessage(m_ReloadConfig).FromBytes(message, ref test, ReadFlags.full);
 
         using (BinaryWriter writer = new BinaryWriter(ms)) {
           //header first
@@ -1018,7 +1036,7 @@ namespace TSystems.RELOAD.Transport {
 
         if (this.IsFragmented() && this.IsSingleFragmentMessage() == false) {
           //if msg is (real) fragmented there are no more bytes after the fragment body
-                
+
           //length of this fragment
           forwarding_header.length = (uint)msEnd;
 
@@ -1157,7 +1175,7 @@ namespace TSystems.RELOAD.Transport {
               //single fragment message (means not fragmented) => process as usual
             }
             else {
-              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FRAGMENTATION, String.Format("Fragmented Message: offset " + fragment_offset));
+              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FRAGMENTATION, String.Format("Fragmented Message: offset " + fragment_offset + "READ bytes " + (forwarding_header.length - reload_msg_begin)) + " left " + (reader.BaseStream.Length - ms.Position));
               reload_message_body = new MessageFragment(RELOAD_MessageCode.Invalid, fragment_offset, last_fragment).FromReader(this, reader, forwarding_header.length - reload_msg_begin);  //this should be the fragmentsize instead of ms.Length better use forwardingheader.length TODO: FIX it
               offset = ms.Position;
               return this;
@@ -1300,9 +1318,9 @@ namespace TSystems.RELOAD.Transport {
     public void addOverlayForwardingOptions(ReloadMessage recmsg) {
       if (recmsg.forwarding_header.via_list != null) {
         foreach (Destination destx in recmsg.forwarding_header.via_list)
-              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO,
-                String.Format("addOverlayForwardingOptions Via={0} ", destx.ToString()));
-          }
+          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO,
+            String.Format("addOverlayForwardingOptions Via={0} ", destx.ToString()));
+      }
       if (recmsg.forwarding_header.destination_list != null) {
         foreach (Destination desty in recmsg.forwarding_header.destination_list)
           m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO,
@@ -1326,8 +1344,8 @@ namespace TSystems.RELOAD.Transport {
             this.forwarding_header.fw_options.Add(answerOption);
 
             //if the message is stored by the GateWay itself the storeanswer has to be processed by the Gateway again
-            if (m_ReloadConfig.ThisMachine is GWMachine)
-              recmsg.LastHopNodeId = m_ReloadConfig.ThisMachine.Topology.Id;
+            //if (m_ReloadConfig.ThisMachine is GWMachine)
+            //  recmsg.LastHopNodeId = m_ReloadConfig.ThisMachine.Topology.Id;
           }
           if (option.fwo_type == ForwardingOptionsType.destinationOverlay) {
             string destination_overlay = System.Text.Encoding.Unicode.GetString(option.bytes);
@@ -1358,7 +1376,7 @@ namespace TSystems.RELOAD.Transport {
         destinationOverlay = resourceName.Substring(resourceName.IndexOf("@") + 1);
       }
       else if (resourceName != null) {
-        
+
         destinationOverlay = resourceName;   //TODO: remove?
       }
       else
@@ -1386,7 +1404,7 @@ namespace TSystems.RELOAD.Transport {
       bytes = System.Text.Encoding.Unicode.GetBytes(m_ReloadConfig.OverlayName); // TODO: Unicode for sure?
       option.bytes = bytes;
       option.length = (UInt16)bytes.Length;
-      forwarding_header.fw_options.Add(option);
+      //forwarding_header.fw_options.Add(option);
 
       return true;    //TODO:
 
@@ -1452,6 +1470,9 @@ namespace TSystems.RELOAD.Transport {
 
     public override RELOAD_MessageBody FromReader(ReloadMessage rm, BinaryReader reader, long reload_msg_size) {
       try {
+        if ((reader.BaseStream.Length - reader.BaseStream.Position) < reload_msg_size) {
+          return null;
+        }
         fragment = reader.ReadBytes((int)reload_msg_size);
       }
       catch (Exception ex) {
@@ -1555,7 +1576,7 @@ namespace TSystems.RELOAD.Transport {
         writer.Write(m_ID.Data);
       }
       //writer.Write((byte)0);
-      ReloadGlobals.WriteOpaqueValue(writer, new System.Text.ASCIIEncoding().GetBytes("NONE")  , 0xFFFF);
+      ReloadGlobals.WriteOpaqueValue(writer, new System.Text.ASCIIEncoding().GetBytes("NONE"), 0xFFFF);
       return length + 1;
     }
     public override RELOAD_MessageBody FromReader(ReloadMessage rm, BinaryReader reader, long reload_msg_size) {
@@ -1647,6 +1668,7 @@ namespace TSystems.RELOAD.Transport {
 
   public class PingReqAns : RELOAD_MessageBody {
     private UInt64 m_response_id;
+    private bool received_ping=false;
     public UInt64 ResponseID {
       get { return m_response_id; }
       set { m_response_id = value; }
@@ -1658,13 +1680,14 @@ namespace TSystems.RELOAD.Transport {
     }
 
     public PingReqAns(UInt64 response_id, bool req) {
-      if (req) {
+      if (!req) {
         m_response_id = response_id;
       }
       RELOAD_MsgCode = req ? RELOAD_MessageCode.Ping_Request : RELOAD_MsgCode = RELOAD_MessageCode.Ping_Answer;
     }
 
     public PingReqAns() {
+      received_ping = true;
     }
 
     public override UInt32 Dump(BinaryWriter writer) {
@@ -1678,7 +1701,10 @@ namespace TSystems.RELOAD.Transport {
       if (RELOAD_MsgCode == RELOAD_MessageCode.Ping_Answer) {
         writer.Write(IPAddress.HostToNetworkOrder((long)m_response_id));
         length = length + 4;
-        writer.Write(IPAddress.HostToNetworkOrder((long)DateTime.Now.Ticks));
+        if (received_ping == true)
+          writer.Write(IPAddress.HostToNetworkOrder((long)m_response_time));  //for signature verification
+        else
+          writer.Write(IPAddress.HostToNetworkOrder((long)DateTime.Now.Ticks));
         length = length + 4;
       }
       return length;
@@ -1688,11 +1714,11 @@ namespace TSystems.RELOAD.Transport {
       /* try to read the packet as a PingReqAns packet */
       try {
         RELOAD_MsgCode = (RELOAD_MessageCode)(UInt16)IPAddress.NetworkToHostOrder(reader.ReadInt16());
-        UInt32 message_len = (UInt32)(IPAddress.HostToNetworkOrder((int)reader.ReadInt32()));
+        UInt32 message_len = (UInt32)(IPAddress.NetworkToHostOrder(reader.ReadInt32()));
 
         if (RELOAD_MsgCode == RELOAD_MessageCode.Ping_Answer) {
-          m_response_id = (UInt64)IPAddress.HostToNetworkOrder((long)reader.ReadInt64());
-          m_response_time = (UInt64)IPAddress.HostToNetworkOrder((long)reader.ReadInt64());
+          m_response_id = (UInt64)IPAddress.NetworkToHostOrder(reader.ReadInt64());
+          m_response_time = (UInt64)IPAddress.NetworkToHostOrder(reader.ReadInt64());
           reload_msg_size = reload_msg_size - 8;
         }
         else {
@@ -2266,7 +2292,7 @@ namespace TSystems.RELOAD.Transport {
           // Write Usage data
           stored_data.Value.GetUsageValue.dump(writer);
           // Write the Signature
-          stored_data.Signature.Dump(writer); 
+          stored_data.Signature.Dump(writer);
           //TODO stored_data.Signature.Dump(writer);
           StreamUtil.WrittenBytesExcludeLength(posBeforeSD, writer);
         }
@@ -2905,7 +2931,8 @@ namespace TSystems.RELOAD.Transport {
     ChordUpdateType m_type;
     DateTime m_UpTime;
     private RELOAD_ErrorCode m_result;
-
+    private bool m_received_update = false;
+    private UInt32 m_TotalSeconds = 0;
     private List<NodeId> m_successors;
 
     public List<NodeId> Successors {
@@ -2919,6 +2946,7 @@ namespace TSystems.RELOAD.Transport {
     }
 
     public UpdateReqAns() {
+      m_received_update = true;
       m_successors = new List<NodeId>();
       m_predecessors = new List<NodeId>();
     }
@@ -2961,8 +2989,10 @@ namespace TSystems.RELOAD.Transport {
 
       if (RELOAD_MsgCode == RELOAD_MessageCode.Update_Request) {
         int UpTimeSeconds = (int)(DateTime.Now - m_UpTime).TotalSeconds;
-
-        writer.Write(IPAddress.HostToNetworkOrder((int)UpTimeSeconds));
+        if (m_received_update ==true)
+          writer.Write(IPAddress.HostToNetworkOrder((int)m_TotalSeconds)); //for signature verification
+        else
+          writer.Write(IPAddress.HostToNetworkOrder((int)UpTimeSeconds));
         length = length + 4;
 
         writer.Write((Byte)m_type);
@@ -3023,7 +3053,7 @@ namespace TSystems.RELOAD.Transport {
         m_predecessors.Clear();
 
         if (RELOAD_MsgCode == RELOAD_MessageCode.Update_Request) {
-          UInt32 TotalSeconds = (UInt32)IPAddress.NetworkToHostOrder(
+          m_TotalSeconds = (UInt32)IPAddress.NetworkToHostOrder(
             reader.ReadInt32());
           reload_msg_size -= 4;
 
@@ -3037,7 +3067,7 @@ namespace TSystems.RELOAD.Transport {
 
           if (iLengthOfPredecessors > 0) {
             while (iLengthOfPredecessors > 0) {
-              m_successors.Add(new NodeId(reader.ReadBytes(ReloadGlobals.NODE_ID_DIGITS)));
+              m_predecessors.Add(new NodeId(reader.ReadBytes(ReloadGlobals.NODE_ID_DIGITS)));
               iLengthOfPredecessors -= ReloadGlobals.NODE_ID_DIGITS;
             }
           }
@@ -3048,7 +3078,7 @@ namespace TSystems.RELOAD.Transport {
 
           if (iLengthOfSuccessors > 0) {
             while (iLengthOfSuccessors > 0) {
-              m_predecessors.Add(new NodeId(reader.ReadBytes(ReloadGlobals.NODE_ID_DIGITS)));
+              m_successors.Add(new NodeId(reader.ReadBytes(ReloadGlobals.NODE_ID_DIGITS)));
               iLengthOfSuccessors -= ReloadGlobals.NODE_ID_DIGITS;
             }
           }
