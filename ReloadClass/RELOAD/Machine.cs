@@ -920,16 +920,11 @@ Predecessor cache:";
       m_UsageManager.RegisterUsage(new SipRegistration(m_UsageManager));
       // TODO
       //m_UsageManager.RegisterUsage(new Haw.DisCo.DisCoUsage(m_UsageManager));
-<<<<<<< HEAD
-      //m_UsageManager.RegisterUsage(new Haw.DisCo.ShaReUsage(m_UsageManager));
-	  m_UsageManager.RegisterUsage(new RedirServiceProvider(m_UsageManager));
-    m_UsageManager.RegisterUsage(new ImageStoreUsage(m_UsageManager));
-=======
+
       //m_UsageManager.RegisterUsage(new Haw.DrisCo.ShaReUsage(m_UsageManager));
 	    m_UsageManager.RegisterUsage(new RedirServiceProvider(m_UsageManager));
       m_UsageManager.RegisterUsage(new CertificateStore(true));
       m_UsageManager.RegisterUsage(new CertificateStore(false));
->>>>>>> c72920f5592677c84932e6ebf9afc0acefa648a4
     }
 
     private void BootStrapConfig() {

@@ -435,19 +435,13 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                                 ReloadFLMEventHandler(this,
                                     new ReloadFLMEventArgs(ReloadFLMEventArgs.ReloadFLMEventTypes.RELOAD_EVENT_RECEIVE_OK, connectionTableEntry, reloadMsg));
                             }
-                                // message was invalid but a least the size could be extracted, try to skip to next packet
-                                else if (thisMsgBytes != 0)
-                                {
-                                  bytesProcessed += thisMsgBytes;
-                                  association.InputBufferOffset -= (int)thisMsgBytes; /* Help rx to terminate */
-                                }
-                            else
-                            {
-                                  m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_{0}: invalid message ignored!", Sender is ReloadTLSServer ? "S" : "C"));
-                                  association.InputBufferOffset = 0;  /* Help rx to terminate */
-                                  return;
-                                }
-                            }
+                                //// message was invalid but a least the size could be extracted, try to skip to next packet
+                                //else if (thisMsgBytes != 0)
+                                //{
+                                //  bytesProcessed += thisMsgBytes;
+                                //  association.InputBufferOffset -= (int)thisMsgBytes; /* Help rx to terminate */
+                                //}
+
                             else
                             {
                                 if (buf != null && buf.Length > 500)

@@ -234,13 +234,8 @@ namespace TSystems.RELOAD.Enroll
         /* load static settings of enrollment server, in this case dynamic resolution is skipped */
         configuration_url = ReloadGlobals.ConfigurationServer;
 
-                /* Determine Configuration server */
-#if IETF80_ENROLL
-//              enrollment_url = "http://130.129.20.69/.well-known/p2psip-enroll";
-//              enrollment_url = "http://67.202.107.163/.well-known/p2psip-enroll";
-                enrollment_url = "https://173.246.102.69/.well.known/p2psip-enroll";
-
-#else
+        /* Determine Configuration server */
+        if (configuration_url == "") {
                 int iRetries = 3;
 
           for (int i = 0; i < iRetries; i++)
@@ -528,12 +523,12 @@ namespace TSystems.RELOAD.Enroll
       string cert_file = applicationDirectory + "\\" + sLocalCertFilename + ".csr";
             string privateKey_file = applicationDirectory +  "\\" + sLocalCertFilename + ".key";
 #else
-#if ENROLL_USE_DER_FORMAT      string cert_file = sLocalCertFilename + ".der";
+#if ENROLL_USE_DER_FORMAT      
+  string cert_file = sLocalCertFilename + ".der";
 #else
       string cert_file = sLocalCertFilename + ".pem";
 #endif
-
-            string privateKey_file = sLocalCertFilename + ".key";
+      string privateKey_file = sLocalCertFilename + ".key";
 #endif
       byte[] byteCSR = null;
             byte[] privateKey = null;
@@ -621,7 +616,7 @@ namespace TSystems.RELOAD.Enroll
                     httpWebPost = (HttpWebRequest)WebRequest.Create(new Uri("https://implementers.org/enrollment?username=Joscha&password=password&count=1"));
 #else
                     httpWebPost = (HttpWebRequest)WebRequest.Create(new Uri(enrollment_url));
-
+#endif
                     /* As of RELOAD draft, use POST */
                     httpWebPost.Method = "POST";
                     httpWebPost.Accept = "application/pkix-cert";
