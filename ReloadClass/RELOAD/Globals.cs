@@ -133,8 +133,8 @@ namespace TSystems.RELOAD {
     public UInt64 TransactionID = BitConverter.ToUInt64(System.Guid.NewGuid().ToByteArray(), 0);
 
     volatile Queue m_CommandQueue = null;
-
-    public Queue CommandQueue {
+    public Port<string> CommandQueuePort = new Port<string>();//
+    public Queue CommandQueue_ {
       get { return m_CommandQueue; }
       set { m_CommandQueue = value; }
     }
@@ -259,7 +259,7 @@ namespace TSystems.RELOAD {
     public static UInt32 SIP_REGISTRATION_KIND_ID = 1234;
     public static UInt32 DISCO_REGISTRATION_KIND_ID = 4321;
     public static UInt32 ACCESS_LIST_KIND_ID = 3210;
-	public static UInt32 REDIR_KIND_ID = 104;
+	  public static UInt32 REDIR_KIND_ID = 104;
 	
     public static bool SelfSignPermitted = false;
     public static readonly DateTime StartOfEpoch = new DateTime(1970, 1, 1);    
@@ -304,8 +304,11 @@ namespace TSystems.RELOAD {
     public static int DICTIONARY_KEY_LENGTH = 16;
     public static NodeId WildcardNodeId = new NodeId(HexStringConverter.ToByteArray("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"));
 
-    public static string SBB_LICENSE_SBB8_KEY = "Insert here your licence key";
-    public static string SBB_LICENSE_PKI8_KEY = "Insert here your licence key";
+    public static string SBB_LICENSE_SBB7_KEY = "...";
+    public static string SBB_LICENSE_PKI7_KEY = "...";
+
+    public static string SBB_LICENSE_SBB8_KEY = "...";
+    public static string SBB_LICENSE_PKI8_KEY = "...";
 
     public static int WEB_REQUEST_TIMEOUT = 30000;
     public static int MAX_TLS_SEND_QUEUE_SIZE = 4;
@@ -344,7 +347,7 @@ namespace TSystems.RELOAD {
     public static String OverlayName = "t-reload.realmv6.org";
     // public static String OverlayName = "mp2psip.org";
     /* The 32 bit checksum/hash of the overlay being used */
-    public static UInt32 OverlayHash = 0x00000001;
+    public static UInt32 OverlayHash = 0x7d171949;
 
     /*enable fragmentation of outgoing packages (only implemented for TLS)*/
     public static bool FRAGMENTATION = false;
@@ -936,7 +939,6 @@ namespace TSystems.RELOAD {
       }
     }
   }
-
 #if COMPACT_FRAMEWORK
    class File
    {
@@ -973,3 +975,18 @@ namespace TSystems.RELOAD {
     }
 #endif
 }
+
+//namespace System.Text {
+//  public class ASCIIEncoding : UTF8Encoding {
+//    public virtual string GetString(byte[] bytes) {
+//      return GetString(bytes, 0, bytes.Length);
+//    }
+//  }
+
+//  public static class Encoding {
+//    public static ASCIIEncoding Default { get { return new ASCIIEncoding(); } }
+//    public static ASCIIEncoding ASCII { get { return new ASCIIEncoding(); } }
+//    public static ASCIIEncoding UTF8 { get { return new ASCIIEncoding(); } }
+//    public static ASCIIEncoding Unicode { get { return new ASCIIEncoding(); } }
+//  }
+//}
