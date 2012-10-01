@@ -309,11 +309,6 @@ namespace TSystems.RELOAD {
     public static int DICTIONARY_KEY_LENGTH = 16;
     public static NodeId WildcardNodeId = new NodeId(HexStringConverter.ToByteArray("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"));
 
-
-    public static string SBB_LICENSE_SBB8_KEY = "put your (eval) license here";
-    public static string SBB_LICENSE_PKI8_KEY = "put your (eval) license here";
-
-
     public static int WEB_REQUEST_TIMEOUT = 30000;
     public static int MAX_TLS_SEND_QUEUE_SIZE = 4;
     public static int RELOAD_SERVER_PORT = 6084;

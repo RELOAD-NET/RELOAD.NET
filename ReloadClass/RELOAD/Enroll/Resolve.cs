@@ -92,8 +92,8 @@ namespace TSystems.RELOAD.Enroll
     {
             m_ReloadConfig = reloadConfig;
 
-            SBUtils.Unit.SetLicenseKey(ReloadGlobals.SBB_LICENSE_SBB7_KEY);
-            SBUtils.Unit.SetLicenseKey(ReloadGlobals.SBB_LICENSE_PKI7_KEY);
+            SBUtils.Unit.SetLicenseKey(SBBKeys.SBB_LICENSE_SBB8_KEY);
+            SBUtils.Unit.SetLicenseKey(SBBKeys.SBB_LICENSE_PKI8_KEY);
         }
 
     public string EnrollmentUrl
