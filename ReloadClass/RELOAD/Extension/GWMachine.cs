@@ -68,7 +68,7 @@ namespace TSystems.RELOAD.Extension {
       }
 
       reloadMsg.security_block = new SecurityBlock(ReloadConfig, ReloadConfig.AccessController.MyIdentity);
-      reloadMsg.security_block.SignMessage(ReloadGlobals.OverlayHash, //TODO: remove overlayhash from glals
+      reloadMsg.security_block.SignMessage(ReloadConfig.OverlayHash, //TODO: remove overlayhash from glals
        reloadMsg.TransactionID.ToString(), reloadMsg.reload_message_body);
       ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, "GW: " + reloadMsg.reload_message_body.RELOAD_MsgCode.ToString() + "Message resigned (new SecurityBlock)");
 

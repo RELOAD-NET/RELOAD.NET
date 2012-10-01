@@ -294,7 +294,7 @@ namespace TSystems.RELOAD {
             FetchUrl = str_arguments[0];
             FetchUrl = FetchUrl.TrimStart(' ');
             FetchUrl = FetchUrl.Replace(" ", "");
-            FetchUrl = "sip:" + FetchUrl + "@" + ReloadGlobals.OverlayName;
+            FetchUrl = "sip:" + FetchUrl + "@" + m_ReloadConfig.OverlayName;
           }
           arguments[0] = FetchUrl;
         }
@@ -343,7 +343,7 @@ namespace TSystems.RELOAD {
 					FetchUrl = arguments[0];
 					FetchUrl = FetchUrl.TrimStart(' ');
 					FetchUrl = FetchUrl.Replace(" ", "");
-					FetchUrl = "sip:" + FetchUrl + "@" + ReloadGlobals.OverlayName;
+          FetchUrl = "sip:" + FetchUrl + "@" + m_ReloadConfig.OverlayName;
 					arguments[0] = FetchUrl;
 				}
 			}
@@ -929,12 +929,12 @@ Predecessor cache:";
 
     private void BootStrapConfig() {
       if (ReloadConfig.Document != null) {
-#if false //TKTEST IETF
+#if true 
           foreach (bootstrapnode bstrnode in ReloadConfig.Document.Overlay.configuration.bootstrapnode)
           m_BootstrapServerList.Add(new BootstrapServer(bstrnode.address, bstrnode.port));
-#endif 
+#else //TKTEST IETF
         m_BootstrapServerList.Add(new BootstrapServer("80.153.249.37", 6084));
-
+#endif
       }
       else {
         if (ReloadGlobals.BootstrapHost != "") {

@@ -931,7 +931,7 @@ namespace TSystems.RELOAD.Usage {
             ForwardUrl = sipURI;
             ForwardUrl = ForwardUrl.TrimStart(' ');
             ForwardUrl = ForwardUrl.Replace(" ", "");
-            ForwardUrl = "sip:" + ForwardUrl + "@" + ReloadGlobals.OverlayName;
+            ForwardUrl = "sip:" + ForwardUrl + "@" + myManager.m_ReloadConfig.OverlayName;
           }
         }
         else if (sipURI.StartsWith("sip:")) {

@@ -526,7 +526,7 @@ namespace TSystems.RELOAD.Transport {
       m_ReloadConfig = rc;
       forwarding_header.version = ReloadGlobals.RELOAD_VERSION;
       forwarding_header.ttl = ReloadGlobals.TTL;
-      forwarding_header.overlay = ReloadGlobals.OverlayHash;
+      forwarding_header.overlay = m_ReloadConfig.OverlayHash;
       forwarding_header.transaction_id = trans_id;
 
       reload_message_body = reload_content;
@@ -539,7 +539,7 @@ namespace TSystems.RELOAD.Transport {
       SignerIdentity myId = m_ReloadConfig.AccessController.MyIdentity;
       security_block = new SecurityBlock(rc, myId);
       /* Sign the message, create stream of body */
-      security_block.SignMessage(ReloadGlobals.OverlayHash,
+      security_block.SignMessage(m_ReloadConfig.OverlayHash,
         trans_id.ToString(), reload_message_body);
     }
 
@@ -1111,7 +1111,7 @@ namespace TSystems.RELOAD.Transport {
           forwarding_header.overlay = (UInt32)IPAddress.NetworkToHostOrder(
             reader.ReadInt32());
 
-          if (forwarding_header.overlay != ReloadGlobals.OverlayHash)
+          if (forwarding_header.overlay != m_ReloadConfig.OverlayHash)
               throw new System.Exception("Message from wrong overlay! (probably invalid hash)");
 
           /* configuration_sequence */
@@ -1341,9 +1341,9 @@ namespace TSystems.RELOAD.Transport {
     // if resourceName contains an @ and the string behind the @ is different from the current OverlayName the ForwardingOptionsType.destinationOverlay is set
     public bool AddDestinationOverlay(string resourceName) {
       String destinationOverlay = null;
-      if (ReloadGlobals.OverlayName == null)
+      if (m_ReloadConfig.OverlayName == null)
         return false;
-      else if (!resourceName.Contains(ReloadGlobals.OverlayName) && resourceName.Contains("@"))
+      else if (!resourceName.Contains(m_ReloadConfig.OverlayName) && resourceName.Contains("@"))
       {
         destinationOverlay = resourceName.Substring(resourceName.IndexOf("@") + 1);
       }
@@ -1373,7 +1373,7 @@ namespace TSystems.RELOAD.Transport {
 
       option = new ForwardingOption();
       option.fwo_type = ForwardingOptionsType.sourceOverlay;
-      bytes = System.Text.Encoding.Unicode.GetBytes(ReloadGlobals.OverlayName); // TODO: Unicode for sure?
+      bytes = System.Text.Encoding.Unicode.GetBytes(m_ReloadConfig.OverlayName); // TODO: Unicode for sure?
       option.bytes = bytes;
       option.length = (UInt16)bytes.Length;
       //forwarding_header.fw_options.Add(option);

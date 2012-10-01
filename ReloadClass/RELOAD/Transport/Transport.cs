@@ -803,7 +803,7 @@ namespace TSystems.RELOAD.Transport {
         else {
           if (m_ReloadConfig.SipUri == "")
             m_ReloadConfig.SipUri = String.Format("{0}@{1}", ReloadGlobals.HostName,
-                ReloadGlobals.OverlayName);
+                m_ReloadConfig.OverlayName);
 
           if (m_ReloadConfig.SipUri != null && m_ReloadConfig.SipUri != "") {
             // explictite SIP registration as minimal config for RELOAD clients

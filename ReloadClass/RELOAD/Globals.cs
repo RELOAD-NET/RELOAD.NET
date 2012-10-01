@@ -66,6 +66,9 @@ namespace TSystems.RELOAD {
 
     public volatile NodeId LocalNodeID = null;
     public volatile String OverlayName = "";
+    public UInt32 OverlayHash {
+      get { return ReloadGlobals.GetHash(OverlayName); }
+    }
     public volatile bool DontCheckSSLCert = false;   //enrollment server ssl cert
     public volatile Node LocalNode = null;
     public volatile Node AdmittingPeer = null;
@@ -308,7 +311,8 @@ namespace TSystems.RELOAD {
 
 
     public static string SBB_LICENSE_SBB8_KEY = "put your (eval) license here";
-    //public static string SBB_LICENSE_PKI8_KEY = "put your (eval) license here";
+    public static string SBB_LICENSE_PKI8_KEY = "put your (eval) license here";
+
 
     public static int WEB_REQUEST_TIMEOUT = 30000;
     public static int MAX_TLS_SEND_QUEUE_SIZE = 4;
@@ -344,10 +348,10 @@ namespace TSystems.RELOAD {
        document describes version 0.1, with a value of 0x01. */
     public static Byte RELOAD_VERSION = 0x01;
 
-    public static String OverlayName = "implementers.org";//"mp2psip.org, t-reload.realmv6.org";
+    //public static String OverlayName = "implementers.org";//"mp2psip.org, t-reload.realmv6.org";  //moved to ReloadConfig
     /* The 32 bit checksum/hash of the overlay being used */
 
-    public static UInt32 OverlayHash = GetHash(OverlayName);
+    //public static UInt32 OverlayHash = GetHash(OverlayName);
 
     /*enable fragmentation of outgoing packages (only implemented for TLS)*/
     public static bool FRAGMENTATION = false;

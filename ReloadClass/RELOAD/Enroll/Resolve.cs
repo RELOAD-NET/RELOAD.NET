@@ -92,8 +92,8 @@ namespace TSystems.RELOAD.Enroll
     {
             m_ReloadConfig = reloadConfig;
 
-      SBUtils.Unit.SetLicenseKey(ReloadGlobals.SBB_LICENSE_SBB8_KEY);
-      //SBUtils.Unit.SetLicenseKey(ReloadGlobals.SBB_LICENSE_PKI8_KEY);
+            SBUtils.Unit.SetLicenseKey(ReloadGlobals.SBB_LICENSE_SBB7_KEY);
+            SBUtils.Unit.SetLicenseKey(ReloadGlobals.SBB_LICENSE_PKI7_KEY);
         }
 
     public string EnrollmentUrl
@@ -190,7 +190,7 @@ namespace TSystems.RELOAD.Enroll
 #if IETF83_ENROLL
                     DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, String.Format("_p2psip-enroll._tcp.{0}", OverlayName), DnDns.Enums.NsType.SRV, DnDns.Enums.NsClass.INET, ProtocolType.Udp);  //--IETF
 #else
-                    DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, String.Format("_p2psip_enroll._tcp.{0}", OverlayName), DnDns.Enums.NsType.SRV, DnDns.Enums.NsClass.INET, ProtocolType.Udp);  //--joscha
+                    DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, String.Format("_reload-config._tcp.{0}", OverlayName), DnDns.Enums.NsType.SRV, DnDns.Enums.NsClass.INET, ProtocolType.Udp);  //--joscha
 #endif
 
 #endif
@@ -208,11 +208,8 @@ namespace TSystems.RELOAD.Enroll
                                     string enrollment_url = lines2[1].TrimEnd('.');
 
                                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO, String.Format("DNS SRV lookup returned: https://{0}", enrollment_url));
-#if IETF83_ENROLL
-                                    return String.Format("https://{0}/.well-known/p2psip-enroll", enrollment_url);
-#else
-                                    return String.Format("https://{0}/p2psip/enroll/", enrollment_url);
-#endif
+
+                                    return String.Format("https://{0}/.well-known/reload-config", enrollment_url);
                                 }
                             }
                         }
@@ -235,12 +232,12 @@ namespace TSystems.RELOAD.Enroll
         configuration_url = ReloadGlobals.ConfigurationServer;
 
         /* Determine Configuration server */
-        if (configuration_url == "") {
+        if (configuration_url == "" || configuration_url == null) {
                 int iRetries = 3;
 
           for (int i = 0; i < iRetries; i++)
           {
-            configuration_url = new ReloadConfigResolve(m_ReloadConfig).ResolveConfigurationServer(ReloadGlobals.OverlayName);
+            configuration_url = new ReloadConfigResolve(m_ReloadConfig).ResolveConfigurationServer(m_ReloadConfig.OverlayName);
 
             if (configuration_url != null)
             {
@@ -254,7 +251,7 @@ namespace TSystems.RELOAD.Enroll
 
         if (configuration_url == null)
         {
-          configuration_url = String.Format("https://{0}/.well-known/p2psip-enroll", ReloadGlobals.OverlayName);
+          configuration_url = String.Format("https://{0}/.well-known/p2psip-enroll", m_ReloadConfig.OverlayName);
           m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, String.Format("DNS SRV failed, set configuration server URL to {0}.", configuration_url));
                 }
 
@@ -409,7 +406,7 @@ namespace TSystems.RELOAD.Enroll
                             m_ReloadConfig.SipUri = m_ReloadConfig.E64_Number;
                             m_ReloadConfig.SipUri = m_ReloadConfig.SipUri.TrimStart(' ');
                             m_ReloadConfig.SipUri = m_ReloadConfig.SipUri.Replace(" ", "");
-                            m_ReloadConfig.SipUri = m_ReloadConfig.SipUri + "@" + ReloadGlobals.OverlayName;
+                            m_ReloadConfig.SipUri = m_ReloadConfig.SipUri + "@" + m_ReloadConfig.OverlayName;
                         }
 
                         m_ReloadConfig.LocalNodeID = new NodeId(HexStringConverter.ToByteArray(words[7]));
@@ -639,8 +636,8 @@ namespace TSystems.RELOAD.Enroll
           Content-Type: application/pkcs10
                      */
 
-          string username = "Thomas";
-          string password = "Eholim_f67";
+          string username = "test";
+          string password = "test";
           //string username = "anonymous";
           //string password = "test";
 
@@ -675,7 +672,7 @@ namespace TSystems.RELOAD.Enroll
           memStream.Position = 0;
           memStream.CopyTo(requestStream);
 
-          using (Stream file = File.OpenWrite("C:\\test.dat"))
+          using (Stream file = File.OpenWrite("C:\\Windows\\Temp\\test.dat"))
           {
             memStream.Position = 0;
             memStream.CopyTo(file);
