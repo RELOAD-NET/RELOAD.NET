@@ -192,7 +192,7 @@ namespace TSystems.RELOAD.Extension {
       machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_REDIR, "GatewayRequestHandler: going to forward form to ServiceProvider" + NameSpace);
 
       message.security_block = new SecurityBlock(machine.ReloadConfig, machine.ReloadConfig.AccessController.MyIdentity);
-      message.security_block.SignMessage(ReloadGlobals.OverlayHash, //TODO: remove overlayhash from glals
+      message.security_block.SignMessage(machine.ReloadConfig.OverlayHash, //TODO: remove overlayhash from glals
        message.TransactionID.ToString(), message.reload_message_body);
       machine.ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, message.reload_message_body.RELOAD_MsgCode.ToString() + " resigned (new SecurityBlock)");
       
