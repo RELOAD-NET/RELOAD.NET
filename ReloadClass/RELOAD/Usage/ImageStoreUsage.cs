@@ -48,7 +48,7 @@ public sealed class ImageStoreUsage : IUsage
 	public ReloadGlobals.DataModel DataModel() { return ReloadGlobals.DataModel.DICTIONARY; }
 
 	// Certain dynamic IUsage members
-	public string ResourceName { get; private set; }
+	public string ResourceName { get; set; }
 	public uint Length { get; private set; }
 
 	/// <summary>
