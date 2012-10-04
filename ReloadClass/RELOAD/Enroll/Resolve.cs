@@ -46,16 +46,10 @@ using TSystems.RELOAD.Utils;
 
 using Microsoft.Ccr.Core;
 
-#if COMPACT_FRAMEWORK
-    using PocketDnDns;
-    using PocketDnDns.Query;
-    using PocketDnDns.Records;
-#else
-    using System.Net.NetworkInformation;
-    using DnDns;
-    using DnDns.Query;
-    using DnDns.Records;
-#endif
+using System.Net.NetworkInformation;
+using DnDns;
+using DnDns.Query;
+using DnDns.Records;
 
 using SBSSLCommon;
 using SBServer;
@@ -73,11 +67,12 @@ namespace TSystems.RELOAD.Enroll
   public class ReloadConfigResolve
   {
 
+#if !WINDOWS_PHONE
         //for enrollment over https without a trusted (selfsigned) certificate
-    private static bool OnCheckSSLCert(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
-    {
+        private static bool OnCheckSSLCert(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors) {
             return true;
         }
+#endif
 
         /* RELOAD BASE 07, 10.2, pg.117 */
         /* DNS SRV for given Overlay name, if no config server URL is provided out of band */
@@ -137,11 +132,9 @@ namespace TSystems.RELOAD.Enroll
 
                     //string e164_NumberNaptr = "2.2.2.2.2.2.2.1.7.1.9.4.e164.arpa";
                     //answer: ...d.u.E2U+sip$!^.*$!sip:+491712222222@mp2psip.org!.
-#if COMPACT_FRAMEWORK
-                    DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, e164_NumberNaptr, PocketDnDns.Enums.NsType.MAPTR, PocketDnDns.Enums.NsClass.INET, ProtocolType.Udp);
-#else
+
                     DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, e164_NumberNaptr, DnDns.Enums.NsType.MAPTR, DnDns.Enums.NsClass.INET, ProtocolType.Udp);
-#endif
+
                     if (dnsResponse != null)
             foreach (IDnsRecord record in dnsResponse.Answers)
             {
@@ -172,6 +165,22 @@ namespace TSystems.RELOAD.Enroll
       {
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, "Resolving Configuration server...");
 
+#if WINDOWS_PHONE
+                // HACK: Windows Phone doesn't support DNS lookups, so fake it
+
+				string enrollment_url = String.Format("enroll.{0}.org", OverlayName);
+				m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO, String.Format("DNS SRV lookup faked: http://{0}", enrollment_url));
+
+				// Be sure to use HTTP instead of HTTPS
+
+#if IETF83_ENROLL
+				return String.Format("http://{0}/.well-known/p2psip-enroll", enrollment_url);
+#else
+				return String.Format("http://{0}/p2psip/enroll/", enrollment_url);
+#endif
+
+#else
+
                 List<string> s_dnsServerAddrList = new List<string>();
 
         if (ReloadGlobals.DNS_Address != null && ReloadGlobals.DNS_Address.Length != 0)
@@ -183,17 +192,12 @@ namespace TSystems.RELOAD.Enroll
 
                     DnsQueryRequest dnsQuery = new DnsQueryRequest();
 
-#if COMPACT_FRAMEWORK
-                    DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, String.Format("_p2psip_enroll._tcp.{0}", OverlayName), PocketDnDns.Enums.NsType.SRV, PocketDnDns.Enums.NsClass.INET, ProtocolType.Udp);
-#else
-
 #if IETF83_ENROLL
                     DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, String.Format("_p2psip-enroll._tcp.{0}", OverlayName), DnDns.Enums.NsType.SRV, DnDns.Enums.NsClass.INET, ProtocolType.Udp);  //--IETF
 #else
-                    DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, String.Format("_reload-config._tcp.{0}", OverlayName), DnDns.Enums.NsType.SRV, DnDns.Enums.NsClass.INET, ProtocolType.Udp);  //--joscha
+                    DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, String.Format("_p2psip_enroll._tcp.{0}", OverlayName), DnDns.Enums.NsType.SRV, DnDns.Enums.NsClass.INET, ProtocolType.Udp);  //--joscha
 #endif
 
-#endif
                     if (dnsResponse != null)
             foreach (IDnsRecord record in dnsResponse.Answers)
             {
@@ -208,12 +212,16 @@ namespace TSystems.RELOAD.Enroll
                                     string enrollment_url = lines2[1].TrimEnd('.');
 
                                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO, String.Format("DNS SRV lookup returned: https://{0}", enrollment_url));
-
-                                    return String.Format("https://{0}/.well-known/reload-config", enrollment_url);
+#if IETF83_ENROLL
+                                    return String.Format("https://{0}/.well-known/p2psip-enroll", enrollment_url);
+#else
+                                    return String.Format("https://{0}/p2psip/enroll/", enrollment_url);
+#endif
                                 }
                             }
                         }
                 }
+#endif
             }
       catch (Exception ex)
       {
@@ -259,13 +267,20 @@ namespace TSystems.RELOAD.Enroll
         {
           m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("Calling configuration server: {0}", configuration_url));
                     //Create a Web-Request to an URL
-          HttpWebRequest httpWebRequest = (HttpWebRequest)WebRequest.Create(configuration_url);
+                    HttpWebRequest httpWebRequest = (HttpWebRequest)WebRequest.Create(configuration_url);
+
+#if !WINDOWS_PHONE
+					// Additional HttpWebRequest parameters are not supported
                     httpWebRequest.Timeout = ReloadGlobals.WEB_REQUEST_TIMEOUT;
+
+					// SSL is also not supported
+
                     if(ReloadGlobals.IgnoreSSLErrors)
                         httpWebRequest.AuthenticationLevel = AuthenticationLevel.None;
 
                     if (m_ReloadConfig.DontCheckSSLCert == true)
                         ServicePointManager.ServerCertificateValidationCallback += new RemoteCertificateValidationCallback(OnCheckSSLCert);
+#endif
 
                     //Send Web-Request and receive a Web-Response
                     httpWebesponse = (HttpWebResponse)httpWebRequest.GetResponse();
@@ -380,7 +395,11 @@ namespace TSystems.RELOAD.Enroll
 
                     /* As of RELOAD draft, use POST */
                     httpWebPost.Method = "POST";
+
+#if !WINDOWS_PHONE
+					// Additional HttpWebRequest parameters are not supported
                     httpWebPost.Timeout = ReloadGlobals.WEB_REQUEST_TIMEOUT;
+#endif
 
                     HttpWebResponse httpPostResponse = null;
                     //Send Web-Request and receive a Web-Response
@@ -617,8 +636,17 @@ namespace TSystems.RELOAD.Enroll
                     /* As of RELOAD draft, use POST */
                     httpWebPost.Method = "POST";
                     httpWebPost.Accept = "application/pkix-cert";
+                    httpWebPost.ContentType = "application/pkcs10";
+
+#if !WINDOWS_PHONE
+					// Additional HttpWebRequest parameters are not supported
                     httpWebPost.Timeout = ReloadGlobals.WEB_REQUEST_TIMEOUT;
+                    //httpWebPost.AllowWriteStreamBuffering = true;
+                    //httpWebPost.SendChunked = true;
+                    httpWebPost.ContentLength = pemCSR.Length;
                     httpWebPost.ProtocolVersion = HttpVersion.Version10;
+#endif
+
                     httpWebPost.UserAgent = "T-Systems RELOAD MDI Appl 1.0";
 
 #if ENROLL_USE_DER_FORMAT
