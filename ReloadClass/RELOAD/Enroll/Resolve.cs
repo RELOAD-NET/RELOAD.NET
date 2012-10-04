@@ -643,7 +643,7 @@ namespace TSystems.RELOAD.Enroll
                     httpWebPost.Timeout = ReloadGlobals.WEB_REQUEST_TIMEOUT;
                     //httpWebPost.AllowWriteStreamBuffering = true;
                     //httpWebPost.SendChunked = true;
-                    httpWebPost.ContentLength = pemCSR.Length;
+					httpWebPost.ContentLength = byteCSR.Length;
                     httpWebPost.ProtocolVersion = HttpVersion.Version10;
 #endif
 
