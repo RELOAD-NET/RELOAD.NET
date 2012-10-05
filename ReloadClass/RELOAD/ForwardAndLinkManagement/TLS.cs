@@ -75,6 +75,14 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
 
 
         #region Tasks
+
+#if WINDOWS_PHONE
+		// Listening sockets is not supported
+		private IEnumerator<ITask> linkListen(int port)
+		{
+			return null;
+		}
+#else
         /// <summary>
         /// TASK: Socket listen and connection accept
         /// </summary>
@@ -140,6 +148,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_SOCKET, String.Format("TLS_S: {0}, Accepted client {1}", reload_server.GetHashCode(), associatedSocket.RemoteEndPoint));
             }
         }
+#endif
 
         /// <summary>
         /// TASK: Socket data reception for server and client part.
@@ -209,7 +218,11 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
             {
                 /* No open connection, open new connection */
                 Socket socket = new Socket(send_params.destinationAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+
+#if !WINDOWS_PHONE
+				// Socket.Handle is not supported by WP7
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_SOCKET, String.Format("TLS_C: Connect socket {0}, {1}:{2}", socket.Handle, send_params.destinationAddress, send_params.port));
+#endif
 
                 var iarPort = new Port<IAsyncResult>();
                 socket.BeginConnect(new IPEndPoint(send_params.destinationAddress, send_params.port), iarPort.Post, null);
@@ -526,7 +539,12 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
         /// <param name="Sender">The sender.</param>
         /// <param name="X509Certificate">The X509 certificate.</param>
         /// <param name="Validate">if set to <c>true</c> [validate].</param>
+#if WINDOWS_PHONE
+		// Because of different callback signatures...
+		private void SBB_OnCertificateValidate(object Sender, TElX509Certificate X509Certificate, ref TSBBoolean Validate)
+#else
         private void SBB_OnCertificateValidate(object Sender, TElX509Certificate X509Certificate, ref bool Validate)
+#endif
         {
             string rfc822Name = null;
 

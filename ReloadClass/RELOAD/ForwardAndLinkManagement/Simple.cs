@@ -231,6 +231,10 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement {
       }
     }
 
+#if WINDOWS_PHONE
+	// Listening sockets is not supported
+	public IEnumerator<ITask> Listen(int port) { return null; }
+#else
     public IEnumerator<ITask> Listen(int port) {
       IPEndPoint endPoint = new IPEndPoint(IPAddress.Any, port);
 
@@ -267,6 +271,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement {
       }
       m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_SOCKET, String.Format("SimpleFLM: << Exit from listen"));
     }
+#endif
 
     private IEnumerator<ITask> Receive(Socket socketClient, NodeId nodeid) {
       if (socketClient == null) {
