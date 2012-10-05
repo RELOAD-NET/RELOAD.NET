@@ -331,7 +331,7 @@ namespace ReloadMDI {
           "DNS Enum fallback to sip uri analysis");
         sip_uri = e164.TrimStart(' ');
         sip_uri = e164.Replace(" ", "");
-        sip_uri = "sip:" + e164 + "@" + ReloadGlobals.OverlayName;
+        sip_uri = "sip:" + e164 + "@" + m_machine.ReloadConfig.OverlayName;
       }
       m_machine.ReloadConfig.SipUri = sip_uri;
     }
