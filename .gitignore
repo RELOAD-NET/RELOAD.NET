@@ -1,1 +1,3 @@
-SBBKeys.cs
+bin/
+obj/
+*.suo
