@@ -36,11 +36,7 @@ using TSystems.RELOAD.Topology;
 using TSystems.RELOAD.Utils;
 using TSystems.RELOAD.Storage;
 
-#if COMPACT_FRAMEWORK
-    using Newtonsoft.Json;
-#else
-    using System.Web.Script.Serialization;
-#endif
+using System.Web.Script.Serialization;
 
 using SBX509;
 using SBCustomCertStorage;
@@ -383,12 +379,13 @@ namespace TSystems.RELOAD {
     }
 
     public static void TRACE(TRACEFLAGS scope, string message) {
-#if !COMPACT_FRAMEWORK
+#if !WINDOWS_PHONE
+      // TODO: Why not to lock?
       lock ("trace")
 #endif
  {
         if ((scope & TRACELEVEL) != 0) {
-#if !COMPACT_FRAMEWORK
+#if !WINDOWS_PHONE
           switch (scope) {
             case TRACEFLAGS.T_DATASTORE:
               Console.ForegroundColor = ConsoleColor.Gray;
@@ -442,8 +439,8 @@ namespace TSystems.RELOAD {
           }
 #endif
 
-#if COMPACT_FRAMEWORK
-                    Console.WriteLine(message);
+#if WINDOWS_PHONE
+			Console.WriteLine(message);
 #else
           String line = String.Format("{0} [{1}]: {2}", DateTime.Now.ToString("HH:mm:ss.fff"), System.Threading.Thread.CurrentThread.ManagedThreadId, message);
 
@@ -583,12 +580,8 @@ namespace TSystems.RELOAD {
     }
 
     public static string JSONSerialize(object o) {
-#if COMPACT_FRAMEWORK
-            return JsonConvert.SerializeObject(o);
-#else
       JavaScriptSerializer serializer = new JavaScriptSerializer();
       return serializer.Serialize(o);
-#endif
     }
 
     public static bool IsPrivateIP(IPAddress myIPAddress) {
@@ -809,6 +802,7 @@ namespace TSystems.RELOAD {
             new NodeId(new byte[] {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 }),
         };
 
+#if !WINDOWS_PHONE
     #region Serialization/Deserialization support
 
     internal static void Endian<T>(T msg, ref byte[] data) {
@@ -855,6 +849,7 @@ namespace TSystems.RELOAD {
       return retStruct;
     }
     #endregion
+#endif
 
     public static UInt32 WriteOpaqueValue(BinaryWriter writer, Byte[] value, UInt64 uiMaxValue) {
       UInt32 length = 0;
@@ -885,14 +880,12 @@ namespace TSystems.RELOAD {
     }
 
     public static void StoreRegAnswer(string answer) {
-#if COMPACT_FRAMEWORK
-            RegistryKey regKeyIPC = Registry.LocalMachine.CreateSubKey(RegKeyIPC);
-#else
+#if !WINDOWS_PHONE
       RegistryKey regKeyIPC = Registry.CurrentUser.CreateSubKey(RegKeyIPC);
-#endif
       if (regKeyIPC != null) {
         regKeyIPC.SetValue("Answer", answer, RegistryValueKind.String);
       }
+#endif
     }
 
     public static byte[] ConvertNonSeekableStreamToByteArray(Stream NonSeekableStream) {
@@ -909,35 +902,35 @@ namespace TSystems.RELOAD {
     public static void PrintException(ReloadConfig rc, Exception ex) {
       rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("****** LastChanceHandler ******"));
       rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("ExceptionType: {0}", ex.GetType().Name));
-#if !COMPACT_FRAMEWORK
+#if !WINDOWS_PHONE
       rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("HelpLine: {0}", ex.HelpLink));
 #endif
-      rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Message: {0}", ex.Message));
-#if !COMPACT_FRAMEWORK
+	  rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Message: {0}", ex.Message));
+#if !WINDOWS_PHONE
       rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Source: {0}", ex.Source));
 #endif
-      rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("StackTrace: {0}", ex.StackTrace));
-#if !COMPACT_FRAMEWORK
+	  rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("StackTrace: {0}", ex.StackTrace));
+#if !WINDOWS_PHONE
       rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TargetSite: {0}", ex.TargetSite));
 #endif
-      string indent = "   ";
+	  string indent = "   ";
       Exception ie = ex;
       while (!((ie.InnerException == null))) {
         ie = ie.InnerException;
         rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format(indent + "****** Inner Exception ******"));
         rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format(indent + "ExceptionType: {0}", ie.GetType().Name));
-#if !COMPACT_FRAMEWORK
+#if !WINDOWS_PHONE
         rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format(indent + "HelpLine: {0}", ie.HelpLink));
 #endif
-        rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format(indent + "Message: {0}", ie.Message));
-#if !COMPACT_FRAMEWORK
+		rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format(indent + "Message: {0}", ie.Message));
+#if !WINDOWS_PHONE
         rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format(indent + "Source: {0}", ie.Source));
 #endif
-        rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format(indent + "StackTrace: {0}", ie.StackTrace));
-#if !COMPACT_FRAMEWORK
+		rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format(indent + "StackTrace: {0}", ie.StackTrace));
+#if !WINDOWS_PHONE
         rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format(indent + "TargetSite: {0}", ie.TargetSite));
 #endif
-        indent += "         ";
+		indent += "         ";
       }
     }
 
@@ -987,54 +980,4 @@ namespace TSystems.RELOAD {
       }
     }
   }
-#if COMPACT_FRAMEWORK
-   class File
-   {
-        // these nice wrappers are missing in Compact Framework
-        public static byte[] ReadAllBytes(string path)
-        {
-           byte[] buffer;
-
-           using (FileStream fs = new FileStream(path, FileMode.Open,
-           FileAccess.Read, FileShare.Read))
-           {
-               int offset = 0;
-               int count = (int)fs.Length;
-               buffer = new byte[count];
-               while (count > 0)
-               {
-                   int bytesRead = fs.Read(buffer, offset, count);
-                   offset += bytesRead;
-                   count -= bytesRead;
-               }
-           }
-
-           return buffer;
-        }
-
-        public static void WriteAllBytes(String path, byte[] bytes)
-        { 
-            if (bytes == null)
-                throw new ArgumentNullException("bytes"); 
-
-            using(FileStream fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read))
-                fs.Write(bytes, 0, bytes.Length); 
-        }
-    }
-#endif
 }
-
-//namespace System.Text {
-//  public class ASCIIEncoding : UTF8Encoding {
-//    public virtual string GetString(byte[] bytes) {
-//      return GetString(bytes, 0, bytes.Length);
-//    }
-//  }
-
-//  public static class Encoding {
-//    public static ASCIIEncoding Default { get { return new ASCIIEncoding(); } }
-//    public static ASCIIEncoding ASCII { get { return new ASCIIEncoding(); } }
-//    public static ASCIIEncoding UTF8 { get { return new ASCIIEncoding(); } }
-//    public static ASCIIEncoding Unicode { get { return new ASCIIEncoding(); } }
-//  }
-//}

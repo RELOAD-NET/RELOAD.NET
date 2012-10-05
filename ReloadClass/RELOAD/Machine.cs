@@ -966,6 +966,9 @@ Predecessor cache:";
       }
     }
 
+#if !WINDOWS_PHONE
+	// The server certificate validation callback is not supported
+
     /// <summary>
     /// Internal object used to allow setting WebRequest.CertificatePolicy to 
     /// not fail on Cert errors
@@ -978,16 +981,19 @@ Predecessor cache:";
       }
     }
 
+#endif
+
     void IgnoreSSLErrors() {
-#if COMPACT_FRAMEWORK
-            System.Net.ServicePointManager.CertificatePolicy = new AcceptAllCertificatePolicy();
-#else
+#if !WINDOWS_PHONE
+      // The server certificate validation callback is not supported
+
       System.Net.ServicePointManager.ServerCertificateValidationCallback +=
       delegate(object sender, System.Security.Cryptography.X509Certificates.X509Certificate certificate,
                     System.Security.Cryptography.X509Certificates.X509Chain chain,
                     System.Net.Security.SslPolicyErrors sslPolicyErrors) {
         return true; // **** Always accept
       };
+
 #endif
     }
 
