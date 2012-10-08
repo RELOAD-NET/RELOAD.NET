@@ -195,7 +195,7 @@ namespace TSystems.RELOAD.Enroll
 #if IETF83_ENROLL
                     DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, String.Format("_p2psip-enroll._tcp.{0}", OverlayName), DnDns.Enums.NsType.SRV, DnDns.Enums.NsClass.INET, ProtocolType.Udp);  //--IETF
 #else
-                    DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, String.Format("_p2psip_enroll._tcp.{0}", OverlayName), DnDns.Enums.NsType.SRV, DnDns.Enums.NsClass.INET, ProtocolType.Udp);  //--joscha
+                    DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, String.Format("_reload-config._tcp.{0}", OverlayName), DnDns.Enums.NsType.SRV, DnDns.Enums.NsClass.INET, ProtocolType.Udp);  //--joscha
 #endif
 
                     if (dnsResponse != null)
@@ -212,11 +212,9 @@ namespace TSystems.RELOAD.Enroll
                                     string enrollment_url = lines2[1].TrimEnd('.');
 
                                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TOPO, String.Format("DNS SRV lookup returned: https://{0}", enrollment_url));
-#if IETF83_ENROLL
-                                    return String.Format("https://{0}/.well-known/p2psip-enroll", enrollment_url);
-#else
-                                    return String.Format("https://{0}/p2psip/enroll/", enrollment_url);
-#endif
+
+                                    return String.Format("https://{0}/.well-known/reload-config", enrollment_url);
+
                                 }
                             }
                         }
