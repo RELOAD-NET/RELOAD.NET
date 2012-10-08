@@ -192,11 +192,7 @@ namespace TSystems.RELOAD.Enroll
 
                     DnsQueryRequest dnsQuery = new DnsQueryRequest();
 
-#if IETF83_ENROLL
-                    DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, String.Format("_p2psip-enroll._tcp.{0}", OverlayName), DnDns.Enums.NsType.SRV, DnDns.Enums.NsClass.INET, ProtocolType.Udp);  //--IETF
-#else
                     DnsQueryResponse dnsResponse = dnsQuery.Resolve(s_dnsServerAddr, String.Format("_reload-config._tcp.{0}", OverlayName), DnDns.Enums.NsType.SRV, DnDns.Enums.NsClass.INET, ProtocolType.Udp);  //--joscha
-#endif
 
                     if (dnsResponse != null)
             foreach (IDnsRecord record in dnsResponse.Answers)
