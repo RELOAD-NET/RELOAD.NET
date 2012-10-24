@@ -450,7 +450,7 @@ namespace ReloadMDI
             ReloadGlobals.TRACELEVEL = (ReloadGlobals.TRACEFLAGS)ReloadMDI.Properties.Settings.Default.TraceLevel;
             ReloadGlobals.ForceLocalConfig = ReloadMDI.Properties.Settings.Default.ForceLocalConfig;
             ReloadGlobals.DNS_Address = ReloadMDI.Properties.Settings.Default.DNS_Address;
-            ReloadGlobals.OverlayName = ReloadMDI.Properties.Settings.Default.OverlayName;
+            //ReloadGlobals.OverlayName = ReloadMDI.Properties.Settings.Default.OverlayName;
             ReloadGlobals.ConfigurationServer = ReloadMDI.Properties.Settings.Default.ConfigurationServer;
             ReloadGlobals.IsVirtualServer = ReloadMDI.Properties.Settings.Default.IsVirtualServer;
             ReloadGlobals.AllowPrivateIP = ReloadMDI.Properties.Settings.Default.AllowPrivateIP;
