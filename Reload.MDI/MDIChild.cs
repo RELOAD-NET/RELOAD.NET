@@ -256,6 +256,7 @@ namespace ReloadMDI {
       m_machine.ReloadConfig.ListenPort = ListenPort;
       m_machine.ReloadConfig.IamClient = ReloadMDI.Properties.Settings.Default.Client;
       m_machine.ReloadConfig.TabPage = this.Text;
+      m_machine.ReloadConfig.OverlayName = ReloadMDI.Properties.Settings.Default.OverlayName;
 
       m_machine.StartWorker();
 
