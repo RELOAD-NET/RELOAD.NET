@@ -41,6 +41,7 @@ using System.Web.Script.Serialization;
 using SBX509;
 using SBCustomCertStorage;
 using System.Security.Cryptography;
+using TSystems.RELOAD.Transport;
 
 
 namespace TSystems.RELOAD {
@@ -184,7 +185,7 @@ namespace TSystems.RELOAD {
       get { return m_Statistics; }
       set { m_Statistics = value; }
     }
-	
+
     public ReloadConfig() {
     }
 
@@ -257,12 +258,12 @@ namespace TSystems.RELOAD {
     public static UInt32 DISCO_REGISTRATION_KIND_ID = 4321;
     public static UInt32 ACCESS_LIST_KIND_ID = 3210;
 
-	  public static UInt32 REDIR_KIND_ID = 104;
+    public static UInt32 REDIR_KIND_ID = 104;
     public static UInt32 CERTIFICATE_BY_NODE_KIND_ID = 3;
-    public static UInt32 CERTIFICATE_BY_USER_KIND_ID = 16; 
-	
+    public static UInt32 CERTIFICATE_BY_USER_KIND_ID = 16;
+
     public static bool SelfSignPermitted = false;
-    public static readonly DateTime StartOfEpoch = new DateTime(1970, 1, 1);    
+    public static readonly DateTime StartOfEpoch = new DateTime(1970, 1, 1);
 
     public enum DataModel {
       INVALID = 0,
@@ -285,7 +286,7 @@ namespace TSystems.RELOAD {
     public static bool ReportIncludeStatistic = false;
     public static bool ReportIncludeTopology = true;
     public static bool AutoExe = false;
-    public static string ReportURL;  
+    public static string ReportURL;
     public static string DNS_Address;
     public static string ConfigurationServer;
     public static string RegKeyIPC = "Software\\T-Systems\\RELOAD";
@@ -530,30 +531,27 @@ namespace TSystems.RELOAD {
     /// </summary>
     /// <param name="data">The data.</param>
     /// <returns></returns>
-    public static UInt32 GetHash(String str2hash)
-    {
-        SHA1CryptoServiceProvider sha1 = new SHA1CryptoServiceProvider();
-        byte[] bytes = sha1.ComputeHash(Encoding.Default.GetBytes(str2hash));
+    public static UInt32 GetHash(String str2hash) {
+      SHA1CryptoServiceProvider sha1 = new SHA1CryptoServiceProvider();
+      byte[] bytes = sha1.ComputeHash(Encoding.Default.GetBytes(str2hash));
 
-        if (BitConverter.IsLittleEndian)
-            bytes = ReverseBytes(bytes);
+      if (BitConverter.IsLittleEndian)
+        bytes = ReverseBytes(bytes);
 
-        return BitConverter.ToUInt32(bytes, 0);
+      return BitConverter.ToUInt32(bytes, 0);
     }
 
-    private static byte[] ReverseBytes(byte[] inArray)
-    {
-        byte temp;
-        int highCtr = inArray.Length - 1;
+    private static byte[] ReverseBytes(byte[] inArray) {
+      byte temp;
+      int highCtr = inArray.Length - 1;
 
-        for (int ctr = 0; ctr < inArray.Length / 2; ctr++)
-        {
-            temp = inArray[ctr];
-            inArray[ctr] = inArray[highCtr];
-            inArray[highCtr] = temp;
-            highCtr -= 1;
-        }
-        return inArray;
+      for (int ctr = 0; ctr < inArray.Length / 2; ctr++) {
+        temp = inArray[ctr];
+        inArray[ctr] = inArray[highCtr];
+        inArray[highCtr] = temp;
+        highCtr -= 1;
+      }
+      return inArray;
     }
 #if false 
         /// <summary>
@@ -650,8 +648,8 @@ namespace TSystems.RELOAD {
 
       return ReloadGlobals.DataModel.INVALID;
     }
-   
-    
+
+
     /// <summary>
     /// Table lookup for pow 2 (finger calculations)
     /// </summary>
@@ -905,15 +903,15 @@ namespace TSystems.RELOAD {
 #if !WINDOWS_PHONE
       rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("HelpLine: {0}", ex.HelpLink));
 #endif
-	  rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Message: {0}", ex.Message));
+      rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Message: {0}", ex.Message));
 #if !WINDOWS_PHONE
       rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Source: {0}", ex.Source));
 #endif
-	  rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("StackTrace: {0}", ex.StackTrace));
+      rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("StackTrace: {0}", ex.StackTrace));
 #if !WINDOWS_PHONE
       rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TargetSite: {0}", ex.TargetSite));
 #endif
-	  string indent = "   ";
+      string indent = "   ";
       Exception ie = ex;
       while (!((ie.InnerException == null))) {
         ie = ie.InnerException;
@@ -922,15 +920,15 @@ namespace TSystems.RELOAD {
 #if !WINDOWS_PHONE
         rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format(indent + "HelpLine: {0}", ie.HelpLink));
 #endif
-		rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format(indent + "Message: {0}", ie.Message));
+        rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format(indent + "Message: {0}", ie.Message));
 #if !WINDOWS_PHONE
         rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format(indent + "Source: {0}", ie.Source));
 #endif
-		rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format(indent + "StackTrace: {0}", ie.StackTrace));
+        rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format(indent + "StackTrace: {0}", ie.StackTrace));
 #if !WINDOWS_PHONE
         rc.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format(indent + "TargetSite: {0}", ie.TargetSite));
 #endif
-		indent += "         ";
+        indent += "         ";
       }
     }
 
@@ -941,20 +939,60 @@ namespace TSystems.RELOAD {
     /// <returns></returns>
     public static NodeId retrieveNodeIDfromCertificate(TElX509Certificate certificate, ref string rfc822Name) {
       if (!certificate.SelfSigned) {
-        string nodeID = null;   /* Accept one nodeID only */
+        /* Accept one nodeID only */
         for (int i = 0; i < certificate.Extensions.SubjectAlternativeName.Content.Count; i++) {
           if (certificate.Extensions.SubjectAlternativeName.Content.get_Names(i).RFC822Name != null)
             rfc822Name = certificate.Extensions.SubjectAlternativeName.Content.get_Names(i).RFC822Name;
-          if (certificate.Extensions.SubjectAlternativeName.Content.get_Names(i).UniformResourceIdentifier != null)
-            nodeID = certificate.Extensions.SubjectAlternativeName.Content.get_Names(i).UniformResourceIdentifier;
+          if (certificate.Extensions.SubjectAlternativeName.Content.get_Names(i).UniformResourceIdentifier != null) {
+            System.Text.ASCIIEncoding enc = new System.Text.ASCIIEncoding();
+            string[] nodeIDSplit = certificate.Extensions.SubjectAlternativeName.Content.get_Names(i).UniformResourceIdentifier.Split(':', ',', '/', '@');
+
+            byte[] UniformResourceIdentifier = HexStringConverter.ToByteArray(nodeIDSplit[3]);
+
+            if (UniformResourceIdentifier.Length != 0) {
+              int counted_bytes = UniformResourceIdentifier.Length;
+              BinaryReader reader = new BinaryReader(new MemoryStream(UniformResourceIdentifier));
+              List<Destination> destination_list = new List<Destination>();
+
+              while (counted_bytes > 2) {
+                DestinationType type = (DestinationType)reader.ReadByte();
+                --counted_bytes;
+                Byte destination_length = reader.ReadByte();
+                --counted_bytes;
+
+                switch (type) {
+                  case DestinationType.node:
+                    destination_list.Add(new Destination(new NodeId(reader.ReadBytes(ReloadGlobals.NODE_ID_DIGITS))));
+                    counted_bytes -= ReloadGlobals.NODE_ID_DIGITS;
+                    break;
+                  case DestinationType.resource:
+                    Byte length = reader.ReadByte();
+                    --counted_bytes;
+                    if (length == 0)
+                      throw new System.Exception("Resource ID length == 0!");
+                    destination_list.Add(new Destination(new ResourceId(reader.ReadBytes(length))));
+                    counted_bytes -= length;
+                    break;
+                  case DestinationType.compressed:
+                    /* not implemented */
+                    throw new System.Exception("retrieveNodeIDfromCertificate: DestinationType 'compressed' is not implemented!");
+                }
+                if (counted_bytes == 1) {
+                  throw new System.Exception("retrieveNodeIDfromCertificate: invalid length of destination element!");
+                }
+              }
+
+              if (counted_bytes != 0) {
+                throw new System.Exception(String.Format("retrieveNodeIDfromCertificate: invalid length of destination  element"));
+              }
+              if (destination_list[0].type == DestinationType.node)
+                return destination_list[0].destination_data.node_id;
+              else
+                throw new System.Exception(String.Format("retrieveNodeIDfromCertificate: invalid Content"));
+            }
+          }
         }
-
-        if (nodeID == null)
-          throw new System.Exception("Invalid certificate, node_id missing");
-
-        string[] nodeIDSplit = nodeID.Split(':', ',', '/', '@');
-
-        return new NodeId(HexStringConverter.ToByteArray(nodeIDSplit[3]));
+        throw new System.Exception("Invalid certificate, node_id missing");
       }
       else
       /* RELOAD BASE 07, 10.3.1, pg. 118 */
