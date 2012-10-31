@@ -31,31 +31,28 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="DnDns">
-      <HintPath>..\DnDns\bin\Debug\DnDns.dll</HintPath>
-    </Reference>
     <Reference Include="Microsoft.Ccr.Core">
-      <HintPath>..\..\Extern\CCR\Microsoft.Ccr.Core.dll</HintPath>
+      <HintPath>..\Extern\CCR\Microsoft.Ccr.Core.dll</HintPath>
     </Reference>
     <Reference Include="SecureBlackbox, Version=9.1.215.0, Culture=neutral, PublicKeyToken=5a62fa96d0ac431a, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\Extern\SecureBlackbox.NET\Assemblies\NET_40\SecureBlackbox.dll</HintPath>
+      <HintPath>..\Extern\SBB OLD\SecureBlackbox.dll</HintPath>
     </Reference>
     <Reference Include="SecureBlackbox.PKI, Version=9.1.215.0, Culture=neutral, PublicKeyToken=5a62fa96d0ac431a, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\Extern\SecureBlackbox.NET\Assemblies\NET_40\SecureBlackbox.PKI.dll</HintPath>
+      <HintPath>..\Extern\SBB OLD\SecureBlackbox.PKI.dll</HintPath>
     </Reference>
     <Reference Include="SecureBlackbox.SSLClient, Version=9.1.215.0, Culture=neutral, PublicKeyToken=5a62fa96d0ac431a, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\Extern\SecureBlackbox.NET\Assemblies\NET_40\SecureBlackbox.SSLClient.dll</HintPath>
+      <HintPath>..\Extern\SBB OLD\SecureBlackbox.SSLClient.dll</HintPath>
     </Reference>
     <Reference Include="SecureBlackbox.SSLCommon, Version=9.1.215.0, Culture=neutral, PublicKeyToken=5a62fa96d0ac431a, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\Extern\SecureBlackbox.NET\Assemblies\NET_40\SecureBlackbox.SSLCommon.dll</HintPath>
+      <HintPath>..\Extern\SBB OLD\SecureBlackbox.SSLCommon.dll</HintPath>
     </Reference>
     <Reference Include="SecureBlackbox.SSLServer, Version=9.1.215.0, Culture=neutral, PublicKeyToken=5a62fa96d0ac431a, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\Extern\SecureBlackbox.NET\Assemblies\NET_40\SecureBlackbox.SSLServer.dll</HintPath>
+      <HintPath>..\Extern\SBB OLD\SecureBlackbox.SSLServer.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -100,6 +97,12 @@
     <Compile Include="RELOAD\Transport\Transport.cs" />
     <Compile Include="RELOAD\Usage\Usages.cs" />
     <Compile Include="RELOAD\Util\Utils.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DnDns\DnDns.csproj">
+      <Project>{df6f2bd7-fa28-44ae-b7d8-fd62832afd01}</Project>
+      <Name>DnDns</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
