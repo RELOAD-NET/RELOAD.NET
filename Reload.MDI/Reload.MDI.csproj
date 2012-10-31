@@ -94,8 +94,9 @@
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="SecureBlackbox">
-      <HintPath>..\..\Extern\SecureBlackbox.NET\Assemblies\NET_40\SecureBlackbox.dll</HintPath>
+    <Reference Include="SecureBlackbox, Version=9.1.215.0, Culture=neutral, PublicKeyToken=5a62fa96d0ac431a, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\Extern\SBB OLD\SecureBlackbox.dll</HintPath>
     </Reference>
     <Reference Include="System">
       <Name>System</Name>
