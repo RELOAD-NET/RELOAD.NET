@@ -694,11 +694,11 @@ namespace TSystems.RELOAD.Enroll
           memStream.Position = 0;
           memStream.CopyTo(requestStream);
 
-          using (Stream file = File.OpenWrite("C:\\Windows\\Temp\\test.dat"))
-          {
-            memStream.Position = 0;
-            memStream.CopyTo(file);
-          }
+          //using (Stream file = File.OpenWrite("C:\\Windows\\Temp\\test.dat"))
+          //{
+          //  memStream.Position = 0;
+          //  memStream.CopyTo(file);
+          //}
 
                     writer.Close();
 
