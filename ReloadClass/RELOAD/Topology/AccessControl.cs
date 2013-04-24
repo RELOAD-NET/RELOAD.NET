@@ -402,7 +402,12 @@ namespace TSystems.RELOAD.Topology {
         var signerCert = new TElX509Certificate();
         GenericCertificate gencert = GetPKC(sd.Signature.Identity);
         byte[] bcert = gencert.Certificate; //TODO: TEST
-        signerCert.LoadFromBufferPEM(bcert, "");
+
+        int ret;
+        if ((ret = signerCert.LoadFromBufferAuto(bcert, 0, bcert.Length, "")) != 0)
+            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
+                String.Format("LoadFromBufferAuto was unable to load certificate from memory buffer\nError Code: {0}", ret));
+
         if (!signerCert.ValidateWithCA(m_ReloadConfig.CACertificate)) {
           m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
             String.Format("validateDataSignatures: NodeID {0}, Certificate" +
