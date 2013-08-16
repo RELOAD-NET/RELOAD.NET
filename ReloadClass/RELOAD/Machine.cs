@@ -303,7 +303,7 @@ namespace TSystems.RELOAD {
       }
     }
 	
-    public void GatherCommandsInQueue(string command, Usage_Code_Point codePoint, int type, NodeId viaGateway, bool CommandFinished = false, params string[] arguments)  //TODO: combine to one single method
+    public void GatherCommandsInQueue(string command, Usage_Code_Point codePoint, int type, NodeId viaGateway, bool CommandFinished = false, params object[] arguments)  //TODO: combine to one single method
     {
       IUsage usage = null;
       StoredDataSpecifier specifier = null;
@@ -332,15 +332,15 @@ namespace TSystems.RELOAD {
             //UInt32[] kinds = UsageManager.CreateUsage(codePoint, null, null).Kinds; TODO: cleanup
             UInt32 kind = UsageManager.CreateUsage(codePoint, null, null).KindId;
 			// To further garantee SIP Usage with Telefonenumbers
-			if (codePoint == Usage_Code_Point.SIP_REGISTRATION && arguments[0].StartsWith("+"))
+			if (codePoint == Usage_Code_Point.SIP_REGISTRATION && arguments[0].ToString().StartsWith("+"))
 			{
 				string FetchUrl = "";
 				ReloadConfigResolve res = new ReloadConfigResolve(m_ReloadConfig);
-				FetchUrl = res.ResolveNaptr(arguments[0]);
+				FetchUrl = res.ResolveNaptr(arguments[0].ToString());
 				if (FetchUrl == null)
 				{
 					ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, "DNS Enum fallback to sip uri analysis");
-					FetchUrl = arguments[0];
+					FetchUrl = arguments[0].ToString();
 					FetchUrl = FetchUrl.TrimStart(' ');
 					FetchUrl = FetchUrl.Replace(" ", "");
           FetchUrl = "sip:" + FetchUrl + "@" + m_ReloadConfig.OverlayName;

@@ -216,7 +216,7 @@ namespace TSystems.RELOAD.Usage {
     ///                         If array, index[1], idex[2] = first, last array index, 
     ///                         If single value, argument == null</param>
     /// <returns></returns>
-    public StoredDataSpecifier createSpecifier(UInt32 kindId, params string[] arguments) {
+    public StoredDataSpecifier createSpecifier(UInt32 kindId, params object[] arguments) {
 
       ReloadGlobals.DataModel dataModel = GetDataModelfromKindId(kindId);
       StoredDataSpecifier spec = null;
@@ -227,21 +227,21 @@ namespace TSystems.RELOAD.Usage {
         case ReloadGlobals.DataModel.ARRAY:
           List<ArrayRange> ranges = new List<ArrayRange>();
           for (int i = 1; i <= arguments.Length - 1; i++) {
-            UInt32 first = UInt16.Parse(arguments[i]);
-            UInt32 last = UInt16.Parse(arguments[++i]);
+            UInt32 first = UInt16.Parse(arguments[i].ToString());
+            UInt32 last = UInt16.Parse(arguments[++i].ToString());
             ranges.Add(new ArrayRange(first, last));
           }
           spec = new StoredDataSpecifier(ranges, kindId, 0, this);
-          spec.ResourceName = arguments[0];
+          spec.ResourceName = arguments[0].ToString();
           return spec;
         case ReloadGlobals.DataModel.DICTIONARY:
           List<string> keys = new List<string>();
-          if (arguments.Count<string>() > 1) {
-            foreach (string key in arguments.ToList<string>().GetRange(1, arguments.Length))
+          if (arguments.Count<object>() > 1) {
+            foreach (string key in arguments.ToList<object>().GetRange(1, arguments.Length))
               keys.Add(new ResourceId(key).ToString());
           }
           spec = new StoredDataSpecifier(keys, kindId, 0, this);
-          spec.ResourceName = arguments[0];
+          spec.ResourceName = arguments[0].ToString();
           return spec;
         default:
           throw new NotSupportedException(String.Format("Data Model {0} is not supported!", dataModel));
