@@ -30,8 +30,6 @@ using System.IO;
 using TSystems.RELOAD.Topology;
 using TSystems.RELOAD.Storage;
 using TSystems.RELOAD.Utils;
-using SBX509;
-using SBPublicKeyCrypto;
 
 namespace TSystems.RELOAD.Extension {
   public class GWMachine : Machine {
