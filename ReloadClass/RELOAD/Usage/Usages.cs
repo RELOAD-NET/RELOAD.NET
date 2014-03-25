@@ -27,7 +27,6 @@ using System.Text;
 using System.IO;
 using Microsoft.Ccr.Core;
 using System.Net;
-using SBX509;
 using TSystems.RELOAD.Utils;
 using TSystems.RELOAD.Transport;
 using TSystems.RELOAD.Topology;
@@ -227,8 +226,8 @@ namespace TSystems.RELOAD.Usage {
         case ReloadGlobals.DataModel.ARRAY:
           List<ArrayRange> ranges = new List<ArrayRange>();
           for (int i = 1; i <= arguments.Length - 1; i++) {
-            UInt32 first = UInt16.Parse(arguments[i].ToString());
-            UInt32 last = UInt16.Parse(arguments[++i].ToString());
+              UInt32 first = UInt16.Parse(arguments[i].ToString());
+              UInt32 last = UInt16.Parse(arguments[++i].ToString());
             ranges.Add(new ArrayRange(first, last));
           }
           spec = new StoredDataSpecifier(ranges, kindId, 0, this);
@@ -1366,9 +1365,9 @@ namespace TSystems.RELOAD.Usage {
         var type = (CertificateType)reader.ReadByte();
         var unknown = reader.ReadByte();
         UInt16 len = (UInt16)IPAddress.NetworkToHostOrder(reader.ReadInt16());
-        TElX509Certificate cert = new TElX509Certificate();
-        Byte[] bcert = reader.ReadBytes(len);
-        cert.LoadFromBuffer(bcert);
+        //TElX509Certificate cert = new TElX509Certificate();
+        //Byte[] bcert = reader.ReadBytes(len);
+        //cert.LoadFromBuffer(bcert);
         long posAfter = reader.BaseStream.Position;
 
         usage_size = usage_size - (posAfter - posBefore);
