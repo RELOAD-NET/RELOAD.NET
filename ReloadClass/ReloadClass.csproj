@@ -10,8 +10,9 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>TSystems</RootNamespace>
     <AssemblyName>ReloadClass</AssemblyName>
-    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -21,6 +22,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -29,6 +31,7 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.Ccr.Core">
@@ -84,9 +87,7 @@
     <Compile Include="RELOAD\Storage\StorageModul.cs" />
     <Compile Include="RELOAD\Transport\Messages.cs" />
     <Compile Include="RELOAD\Topology\Node.cs" />
-    <Compile Include="RELOAD\ForwardAndLinkManagement\Classes.cs">
-      <SubType>Component</SubType>
-    </Compile>
+    <Compile Include="RELOAD\ForwardAndLinkManagement\Classes.cs" />
     <Compile Include="RELOAD\ForwardAndLinkManagement\Simple.cs" />
     <Compile Include="RELOAD\ForwardAndLinkManagement\TLS.cs" />
     <Compile Include="RELOAD\ForwardAndLinkManagement\TLS.FLM.cs" />
