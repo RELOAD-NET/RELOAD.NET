@@ -121,6 +121,9 @@ namespace TSystems.RELOAD.Utils {
             if (((object)a == null) || ((object)b == null)) {
                 return false;
             }
+            if (a.m_data.Length != b.m_data.Length) {
+                return false;
+            }
             for (int i = a.m_digits - 1; i >= 0; i--) {
                 if (a.m_data[i] != b.m_data[i])
                     return false;
@@ -347,6 +350,26 @@ namespace TSystems.RELOAD.Utils {
 
             return new NodeId(result);
         }
+
+        //public static bool operator ==(NodeId a, NodeId b)
+        //{
+        //    if (System.Object.ReferenceEquals(a, b)) {
+        //        return true;
+        //    }
+        //    if (((object)a == null) || ((object)b == null)) {
+        //        return false;
+        //    }
+        //    if(a.Data.Length != b.Data.Length) {
+        //        return false;
+        //    }
+
+        //    for (int i = a.Data.Length - 1; i >= 0; i--)
+        //    {
+        //        if (a.Data[i] != b.Data[i])
+        //            return false;
+        //    }
+        //    return true;
+        //}
 
         /// <summary>
         /// Implements the operator <<, 

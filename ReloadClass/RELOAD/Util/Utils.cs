@@ -26,6 +26,7 @@ using System.Linq;
 using System.Text;
 using System.IO;
 using System.Net;
+using System.Security.Cryptography.X509Certificates;
 
 namespace TSystems.RELOAD.Utils {
 
@@ -150,5 +151,31 @@ namespace TSystems.RELOAD.Utils {
       long readBytes = posAfterRead - posBeforeRead;
       return (UInt32)readBytes;
     }
+  }
+
+  public static class X509Utils
+  {
+
+      public static bool VerifyCertificate(X509Certificate2 local, X509Certificate2 root)
+      {
+          var chain = new X509Chain();
+          chain.ChainPolicy.ExtraStore.Add(root);
+
+          // ignore certificate revokation
+          chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+
+          // preliminary validation
+          if (!chain.Build(local))        
+              return false;
+
+          // make sure all the thumbprints of the CAs match up
+          for (var i = 1; i < chain.ChainElements.Count; i++)
+          {
+              if (chain.ChainElements[i].Certificate.Thumbprint != chain.ChainPolicy.ExtraStore[i - 1].Thumbprint)
+                  return false;
+          }
+
+          return true;
+      }
   }
 }
