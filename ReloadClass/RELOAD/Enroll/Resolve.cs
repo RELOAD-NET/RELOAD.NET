@@ -110,7 +110,6 @@ namespace TSystems.RELOAD.Enroll {
 
         if (!s_dnsServerAddrList.Contains(ReloadGlobals.DNS_Address))
           s_dnsServerAddrList.Add(ReloadGlobals.DNS_Address);
-        //s_dnsServerAddrList.Add("141.39.41.73");
 
         foreach (string s_dnsServerAddr in s_dnsServerAddrList) {
           DnsQueryRequest dnsQuery = new DnsQueryRequest();
@@ -508,12 +507,12 @@ namespace TSystems.RELOAD.Enroll {
           /* private certificate configuration */
 
           //String CN = "reload:" + ReloadGlobals.IPAddressFromHost(m_ReloadConfig, ReloadGlobals.HostName).ToString() + ":" + m_ReloadConfig.ListenPort;
-          String CN = "reload";
-          String Country = "DE";
-          String Locality = "Mannheim";
-          String State = "Baden-Wuerttemberg";
-          String Organization = "HS-Mannheim";
-          String Unit = "SWT";
+          String CN = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.CN;
+          String Country = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.Country;
+          String Locality = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.Locality;
+          String State = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.State;
+          String Organization = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.Organization;
+          String Unit = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.Unit;
 
           CertificateRequest.Subject = new OpenSSL.X509.X509Name("/CN=" + CN + "/C=" + Country + "/L=" + Locality + "/ST=" + State + "/O=" + Organization + "/OU=" + Unit);
 
@@ -567,12 +566,8 @@ namespace TSystems.RELOAD.Enroll {
           {
               HttpWebRequest httpWebPost;
 
-              /* get node id and sip url */
-#if IETF83_ENROLL
-                    httpWebPost = (HttpWebRequest)WebRequest.Create(new Uri("https://implementers.org/enrollment?username=Joscha&password=password&count=1"));
-#else
               httpWebPost = (HttpWebRequest)WebRequest.Create(new Uri(enrollment_url));
-#endif
+
               /* As of RELOAD draft, use POST */
               httpWebPost.Method = "POST";
               httpWebPost.Accept = "application/pkix-cert";
@@ -603,8 +598,9 @@ namespace TSystems.RELOAD.Enroll {
               Content-Type: application/pkcs10
                          */
 
-              string username = "test";
-              string password = "test";
+              /* private enrollment server configuration */
+              string username = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.Username;
+              string password = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.Password;
 
               string boundary = "----------------------------" + DateTime.Now.Ticks.ToString("x");
 
