@@ -38,11 +38,9 @@ using TSystems.RELOAD.Storage;
 
 using System.Web.Script.Serialization;
 
-using SBX509;
-using SBCustomCertStorage;
 using System.Security.Cryptography;
 using TSystems.RELOAD.Transport;
-
+using System.Security.Cryptography.X509Certificates;
 
 namespace TSystems.RELOAD {
 
@@ -72,14 +70,16 @@ namespace TSystems.RELOAD {
     /// <summary>
     /// Local certificates and configuration stuff. 
     /// </summary>
-    private TElMemoryCertStorage m_reload_local_cert_storage = null;
+    private MemoryCertStorage m_reload_local_net_cert_storage = null;
 
-    public TElMemoryCertStorage ReloadLocalCertStorage {
-      get { return m_reload_local_cert_storage; }
-      set { m_reload_local_cert_storage = value; }
+    public MemoryCertStorage ReloadLocalNetCertStorage
+    {
+        get { return m_reload_local_net_cert_storage; }
+        set { m_reload_local_net_cert_storage = value; }
     }
-    public volatile TElX509Certificate MyCertificate = null;
-    public volatile TElX509Certificate CACertificate = null;
+
+    public volatile X509Certificate2 MyCertificate = null;
+    public volatile X509Certificate2 RootCertificate = null;     // == CACertificate
     public volatile int ListenPort = 6084;
     public int MyCoordinate = 0; // Mok for Demo
     public bool IsFocus = false; // Mok for Demo
@@ -290,6 +290,23 @@ namespace TSystems.RELOAD {
     public static string DNS_Address;
     public static string ConfigurationServer;
     public static string RegKeyIPC = "Software\\T-Systems\\RELOAD";
+
+      // STUN Servers
+    public static string StunIP1;
+    public static ushort StunPort1;
+    public static string StunIP2;
+    public static ushort StunPort2;
+
+      // Use NO_ICE
+    public static bool UseNoIce;
+
+      // Use UPnP
+    public static bool UseUPnP;
+
+      // Use SR
+    public static bool UseSR;
+
+
     /* Set this value to false, to set a fixed IP for enrollment server 
  */
     public static bool UseDNS = false;
@@ -932,90 +949,176 @@ namespace TSystems.RELOAD {
       }
     }
 
-    /// <summary>
-    /// Retrieve node_id from certificate from certificate.
-    /// </summary>
-    /// <param name="certificate">The certificate.</param>
-    /// <returns></returns>
-    public static NodeId retrieveNodeIDfromCertificate(TElX509Certificate certificate, ref string rfc822Name) {
-      if (!certificate.SelfSigned) {
-        /* Accept one nodeID only */
-        for (int i = 0; i < certificate.Extensions.SubjectAlternativeName.Content.Count; i++) {
-          if (certificate.Extensions.SubjectAlternativeName.Content.get_Names(i).RFC822Name != null)
-            rfc822Name = certificate.Extensions.SubjectAlternativeName.Content.get_Names(i).RFC822Name;
-          if (certificate.Extensions.SubjectAlternativeName.Content.get_Names(i).UniformResourceIdentifier != null) {
-            System.Text.ASCIIEncoding enc = new System.Text.ASCIIEncoding();
-            string[] nodeIDSplit = certificate.Extensions.SubjectAlternativeName.Content.get_Names(i).UniformResourceIdentifier.Split(':', ',', '/', '@');
+    public static NodeId retrieveNodeIDfromCertificate(System.Security.Cryptography.X509Certificates.X509Certificate2 certificate, ref string rfc822Name)
+    {
+        // .net class for convenience at accessing extensions and exporting public key
+        //System.Security.Cryptography.X509Certificates.X509Certificate2 cert = null;
 
-            byte[] UniformResourceIdentifier = HexStringConverter.ToByteArray(nodeIDSplit[3]);
-
-            if (UniformResourceIdentifier.Length != 0) {
-              int counted_bytes = UniformResourceIdentifier.Length;
-              BinaryReader reader = new BinaryReader(new MemoryStream(UniformResourceIdentifier));
-              List<Destination> destination_list = new List<Destination>();
-
-              while (counted_bytes > 2) {
-                DestinationType type = (DestinationType)reader.ReadByte();
-                --counted_bytes;
-                Byte destination_length = reader.ReadByte();
-                --counted_bytes;
-
-                switch (type) {
-                  case DestinationType.node:
-                    destination_list.Add(new Destination(new NodeId(reader.ReadBytes(ReloadGlobals.NODE_ID_DIGITS))));
-                    counted_bytes -= ReloadGlobals.NODE_ID_DIGITS;
-                    break;
-                  case DestinationType.resource:
-                    Byte length = reader.ReadByte();
-                    --counted_bytes;
-                    if (length == 0)
-                      throw new System.Exception("Resource ID length == 0!");
-                    destination_list.Add(new Destination(new ResourceId(reader.ReadBytes(length))));
-                    counted_bytes -= length;
-                    break;
-                  case DestinationType.compressed:
-                    /* not implemented */
-                    throw new System.Exception("retrieveNodeIDfromCertificate: DestinationType 'compressed' is not implemented!");
-                }
-                if (counted_bytes == 1) {
-                  throw new System.Exception("retrieveNodeIDfromCertificate: invalid length of destination element!");
-                }
-              }
-
-              if (counted_bytes != 0) {
-                throw new System.Exception(String.Format("retrieveNodeIDfromCertificate: invalid length of destination  element"));
-              }
-              if (destination_list[0].type == DestinationType.node)
-                return destination_list[0].destination_data.node_id;
-              else
-                throw new System.Exception(String.Format("retrieveNodeIDfromCertificate: invalid Content"));
-            }
-          }
-        }
-        throw new System.Exception("Invalid certificate, node_id missing");
-      }
-      else
-      /* RELOAD BASE 07, 10.3.1, pg. 118 */
-      /* NodeID is hash(publicKey) in case self-certificate */ {
-        byte[] shaHash = null;
-        byte[] publicKey;
-        certificate.GetPublicKeyBlob(out publicKey);
-        /* TODO: Handle non-self signed certificates */
-        //if (m_ReloadOverlayConfiguration.Overlay.configuration.selfsignedpermitted.digest.ToLower().Trim() == "sha1")
+        if (certificate.Issuer != certificate.Subject)
         {
-          SHA1CryptoServiceProvider sha1 = new SHA1CryptoServiceProvider();
-          shaHash = sha1.ComputeHash(publicKey);
-        }
-        /* TKTODO no sha256 definition for Compact Framework
-         *          else {
-                        SHA256Managed sha256 = new SHA256Managed();
-                        shaHash = sha256.ComputeHash(publicKey);
+           //cert = new System.Security.Cryptography.X509Certificates.X509Certificate2(certificate.DER);
+
+            String[] SANFields = null;
+            String RFCName = null;
+            String URI = null;
+
+            foreach (System.Security.Cryptography.X509Certificates.X509Extension ext in certificate.Extensions)
+            {
+                if (ext.Oid.Value.Equals(/* SAN OID */"2.5.29.17"))     // Check if extension field is SubjectAltName
+                {
+                    SANFields = ext.Format(true).Split(new String[] {"\r\n" }, StringSplitOptions.None);
+
+                    // extract email and URI from SubjectAltName
+                    foreach (String value in SANFields)
+                    {
+                        if (value.StartsWith("RFC822-Name"))
+                            RFCName = value.Substring(12);
+                        if (value.StartsWith("URL"))
+                            URI = value.Substring(4);
                     }
-         **/
-        /* Truncate lower significant bytes in order to get a 128 bit NodeID */
-        Array.Resize<byte>(ref shaHash, 16);
-        return new NodeId(shaHash);
-      }
+                }
+            }
+
+            /* Accept one nodeID only */ 
+            for (int i = 0; i < SANFields.Length; i++)
+            {
+                if (RFCName != null)
+                    rfc822Name = RFCName;
+                if (URI != null)
+                {
+                    System.Text.ASCIIEncoding enc = new System.Text.ASCIIEncoding();
+                    string[] nodeIDSplit = URI.Split(':', ',', '/', '@');
+
+                    byte[] UniformResourceIdentifier = HexStringConverter.ToByteArray(nodeIDSplit[3]);
+
+                    if (UniformResourceIdentifier.Length != 0)
+                    {
+                        int counted_bytes = UniformResourceIdentifier.Length;
+                        BinaryReader reader = new BinaryReader(new MemoryStream(UniformResourceIdentifier));
+                        List<Destination> destination_list = new List<Destination>();
+
+                        while (counted_bytes > 2)
+                        {
+                            DestinationType type = (DestinationType)reader.ReadByte();
+                            --counted_bytes;
+                            Byte destination_length = reader.ReadByte();
+                            --counted_bytes;
+
+                            switch (type)
+                            {
+                                case DestinationType.node:
+                                    destination_list.Add(new Destination(new NodeId(reader.ReadBytes(ReloadGlobals.NODE_ID_DIGITS))));
+                                    counted_bytes -= ReloadGlobals.NODE_ID_DIGITS;
+                                    break;
+                                case DestinationType.resource:
+                                    Byte length = reader.ReadByte();
+                                    --counted_bytes;
+                                    if (length == 0)
+                                        throw new System.Exception("Resource ID length == 0!");
+                                    destination_list.Add(new Destination(new ResourceId(reader.ReadBytes(length))));
+                                    counted_bytes -= length;
+                                    break;
+                                case DestinationType.compressed:
+                                    /* not implemented */
+                                    throw new System.Exception("retrieveNodeIDfromCertificate: DestinationType 'compressed' is not implemented!");
+                            }
+                            if (counted_bytes == 1)
+                            {
+                                throw new System.Exception("retrieveNodeIDfromCertificate: invalid length of destination element!");
+                            }
+                        }
+
+                        if (counted_bytes != 0)
+                        {
+                            throw new System.Exception(String.Format("retrieveNodeIDfromCertificate: invalid length of destination  element"));
+                        }
+                        if (destination_list[0].type == DestinationType.node)
+                            return destination_list[0].destination_data.node_id;
+                        else
+                            throw new System.Exception(String.Format("retrieveNodeIDfromCertificate: invalid Content"));
+                    }
+                }
+            }
+            throw new System.Exception("Invalid certificate, node_id missing");
+        }
+        else
+        /* RELOAD BASE 07, 10.3.1, pg. 118 */
+        /* NodeID is hash(publicKey) in case self-certificate */
+        {
+            byte[] shaHash = null;
+            byte[] publicKey;
+
+            publicKey = certificate.GetPublicKey();
+
+            /* TODO: Handle non-self signed certificates */
+            //if (m_ReloadOverlayConfiguration.Overlay.configuration.selfsignedpermitted.digest.ToLower().Trim() == "sha1")
+            {
+                SHA1CryptoServiceProvider sha1 = new SHA1CryptoServiceProvider();
+                shaHash = sha1.ComputeHash(publicKey);
+            }
+            /* TKTODO no sha256 definition for Compact Framework
+             *          else {
+                            SHA256Managed sha256 = new SHA256Managed();
+                            shaHash = sha256.ComputeHash(publicKey);
+                        }
+             **/
+            /* Truncate lower significant bytes in order to get a 128 bit NodeID */
+            Array.Resize<byte>(ref shaHash, 16);
+            return new NodeId(shaHash);
+        }
     }
+
   }
+
+  public class MemoryCertStorage
+  {
+      private List<System.Security.Cryptography.X509Certificates.X509Certificate2> storage;
+
+      public MemoryCertStorage()
+      {
+          storage = new List<System.Security.Cryptography.X509Certificates.X509Certificate2>();
+      }
+
+      public void Clear()
+      {
+          storage.Clear();
+      }
+
+      public int LoadFromStreamPFX(System.IO.Stream Stream, string password, int Count /* = 0 */)
+      {
+          byte[] certBuffer;
+          using (MemoryStream ms = new MemoryStream())
+          {
+              Stream.CopyTo(ms);
+              certBuffer = ms.ToArray();
+          }
+
+          System.Security.Cryptography.X509Certificates.X509Certificate2 cert = null;
+
+          try
+          {
+              cert = new System.Security.Cryptography.X509Certificates.X509Certificate2(certBuffer, password);
+              this.Add(cert, true);
+              return 0;
+          }
+          catch (CryptographicException ex)
+          {
+              throw new Exception(ex.Message);
+          }
+      }
+
+      public System.Security.Cryptography.X509Certificates.X509Certificate2 get_Certificates(int index)
+      {
+          return storage[index];
+      }
+
+      public void Add(System.Security.Cryptography.X509Certificates.X509Certificate2 Certificate, bool CopyPrivateKey)
+      {
+          if (!CopyPrivateKey)
+              Certificate.PrivateKey = new RSACryptoServiceProvider();
+          storage.Add(Certificate);
+      }
+  }
+
+
 }

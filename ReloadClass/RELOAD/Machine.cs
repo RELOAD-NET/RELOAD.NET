@@ -336,11 +336,11 @@ namespace TSystems.RELOAD {
 			{
 				string FetchUrl = "";
 				ReloadConfigResolve res = new ReloadConfigResolve(m_ReloadConfig);
-				FetchUrl = res.ResolveNaptr(arguments[0].ToString());
+                FetchUrl = res.ResolveNaptr(arguments[0].ToString());
 				if (FetchUrl == null)
 				{
 					ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, "DNS Enum fallback to sip uri analysis");
-					FetchUrl = arguments[0].ToString();
+                    FetchUrl = arguments[0].ToString();
 					FetchUrl = FetchUrl.TrimStart(' ');
 					FetchUrl = FetchUrl.Replace(" ", "");
           FetchUrl = "sip:" + FetchUrl + "@" + m_ReloadConfig.OverlayName;
@@ -381,8 +381,14 @@ namespace TSystems.RELOAD {
     }
 
     public void SendCommand(String sCommand) {
+        try
+        {
+            Arbiter.Activate(ReloadConfig.DispatcherQueue, new IterativeTask<String>(sCommand, CommandTask));
+        }
+        catch (Exception ex)
+        {
 
-      Arbiter.Activate(ReloadConfig.DispatcherQueue, new IterativeTask<String>(sCommand, CommandTask));      
+        }
     }
 
     #endregion
@@ -394,7 +400,7 @@ namespace TSystems.RELOAD {
         //lock (m_ReloadConfig.CommandQueue) 
         {
           //TODO: geht nur für GatherCommandsInQueue
-          if (ReloadConfig.CommandQueuePort.ItemCount > 0 && ReloadConfig.CommandQueuePort.ItemCount == (gatheredSpecifiersQueue.ItemCount + gatheredStoreDatasQueue.ItemCount)) {
+          if (ReloadConfig.CommandQueuePort.ItemCount > 0 /*&& ReloadConfig.CommandQueuePort.ItemCount == (gatheredSpecifiersQueue.ItemCount + gatheredStoreDatasQueue.ItemCount)*/) {
             string s;
             //ReloadConfig.CommandQueuePort.Test(out s);
             while (ReloadConfig.CommandQueuePort.Test(out s)) {
@@ -506,15 +512,19 @@ namespace TSystems.RELOAD {
                       String.Format("Bootstrap Server cannot leave"));
                 }
                 else {
-                  if (ReloadConfig.IamClient) {
-                    Arbiter.Activate(ReloadConfig.DispatcherQueue,
-                        new IterativeTask<string, List<StoreKindData>>(ReloadConfig.SipUri,
-                            new List<StoreKindData>(), m_transport.Store));
-                  }
-                  else
-                    Arbiter.Activate(ReloadConfig.DispatcherQueue, new IterativeTask<bool>(true, m_transport.HandoverKeys));
+                    if (ReloadConfig.IamClient)
+                    {
+                        Arbiter.Activate(ReloadConfig.DispatcherQueue,
+                            new IterativeTask<string, List<StoreKindData>>(ReloadConfig.SipUri,
+                                new List<StoreKindData>(), m_transport.Store));
+                    }
+                    else
+                    {
+                        if (ReloadConfig.DispatcherQueue != null)
+                            Arbiter.Activate(ReloadConfig.DispatcherQueue, new IterativeTask<bool>(true, m_transport.HandoverKeys));
+                    }
 
-                  ReloadConfig.IamClient = true;
+                  //ReloadConfig.IamClient = true;
                 }
                 // peer looses bootstrap flag, this is important for rejoin
                 //TKTODO Rejoin of bootstrap server not solved
@@ -533,11 +543,15 @@ namespace TSystems.RELOAD {
             }
             //ReloadConfig.CommandQueue.Clear();
           }
-          //ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_KEEPALIVE, "");
 
-          Port<DateTime> timeoutPort = new Port<DateTime>();
-          ReloadConfig.DispatcherQueue.EnqueueTimer(new TimeSpan(0, 0, 0, 0, 100 /* ms 100ms default */), timeoutPort);
-          yield return Arbiter.Receive(false, timeoutPort, x => { });
+            //ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_KEEPALIVE, "");
+
+          if (ReloadConfig.State != RELOAD.ReloadConfig.RELOAD_State.Exit)
+          {
+              Port<DateTime> timeoutPort = new Port<DateTime>();
+              ReloadConfig.DispatcherQueue.EnqueueTimer(new TimeSpan(0, 0, 0, 0, 100 /* ms 100ms default */), timeoutPort);
+              yield return Arbiter.Receive(false, timeoutPort, x => { });
+          }
         }
       }
     }
@@ -800,12 +814,19 @@ Predecessor cache:";
     }
 
 
-
     public void Finish() {
       ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, "Shutdown...");
 
+      // delete local certificate
+      X509Store store = new X509Store(StoreName.My, StoreLocation.CurrentUser);
+      store.Open(OpenFlags.ReadWrite);
+      store.Remove(m_ReloadConfig.MyCertificate);
+      store.Close();
+      ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, "Deleted Local Certificate");
+
       ReloadConfig.State = ReloadConfig.RELOAD_State.Exit;
       stateUpdates(ReloadConfig.RELOAD_State.Exit);
+
       try {
         if (m_interface_flm != null) {
           m_interface_flm.ShutDown();
@@ -916,15 +937,16 @@ Predecessor cache:";
     }
 
     private void InitUsageManager() {
-      m_UsageManager.Init(this);
-      m_UsageManager.RegisterUsage(new SipRegistration(m_UsageManager));
+        m_UsageManager.Init(this);
+        m_UsageManager.RegisterUsage(new SipRegistration(m_UsageManager));
+        m_UsageManager.RegisterUsage(new ImageStoreUsage(m_UsageManager));
       // TODO
       //m_UsageManager.RegisterUsage(new Haw.DisCo.DisCoUsage(m_UsageManager));
 
       //m_UsageManager.RegisterUsage(new Haw.DrisCo.ShaReUsage(m_UsageManager));
 	    m_UsageManager.RegisterUsage(new RedirServiceProvider(m_UsageManager));
-      m_UsageManager.RegisterUsage(new CertificateStore(true));
-      m_UsageManager.RegisterUsage(new CertificateStore(false));
+        m_UsageManager.RegisterUsage(new CertificateStore(true));
+        m_UsageManager.RegisterUsage(new CertificateStore(false));
     }
 
     private void BootStrapConfig() {
