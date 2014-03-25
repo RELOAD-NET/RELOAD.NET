@@ -132,7 +132,7 @@ namespace TSystems.RELOAD.Transport {
         /// <param name="rx_filter">The rx_filter.</param>
         /// <param name="rx_timeout">The rx_timeout.</param>
         /// <returns></returns>
-        private IEnumerator<ITask> Receive(ReloadMessageFilter rx_filter, int rx_timeout) {
+        private IEnumerator<ITask> Receive(ReloadMessageFilter rx_filter, int rx_timeout, String messageCode) {
 
             m_DispatcherQueue.EnqueueTimer(TimeSpan.FromMilliseconds(rx_timeout), timeouted);
             m_fError = false;
@@ -148,7 +148,7 @@ namespace TSystems.RELOAD.Transport {
                 yield return Arbiter.Choice(
                     Arbiter.Receive(false, timeouted, to =>
                     {
-                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, String.Format("Receiver {0} Rx Timeout", rx_filter.transactionID));
+                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, String.Format("Receiver {0} Rx Timeout after sending {1}", rx_filter.transactionID, messageCode));
                         fTimeouted = true;
                     }),
                     Arbiter.Receive(false, m_portWaitForRx, trigger =>
@@ -186,7 +186,7 @@ namespace TSystems.RELOAD.Transport {
                                   }
                                     if (reassembledMsg == null) //not yet all fragments received => not reassembled
                                     {
-                                      Arbiter.Activate(m_DispatcherQueue, new IterativeTask<ReloadMessageFilter, int>(rx_filter, rx_timeout, Receive));
+                                      Arbiter.Activate(m_DispatcherQueue, new IterativeTask<ReloadMessageFilter, int, String>(rx_filter, rx_timeout, "", Receive));
                                       m_TimeStart = DateTime.Now;
                                       yield break;
                                     }
@@ -258,7 +258,7 @@ namespace TSystems.RELOAD.Transport {
             Arbiter.Activate(m_DispatcherQueue, new IterativeTask<Node, ReloadMessage>(this.m_NextHopNode, reloadMessage, m_Transport.Send));
             m_TimeStart = DateTime.Now;
             //m_MessageFilter = rx_filter;
-            Arbiter.Activate(m_DispatcherQueue, new IterativeTask<ReloadMessageFilter, int>(rx_filter, rx_timeout, Receive));
+            Arbiter.Activate(m_DispatcherQueue, new IterativeTask<ReloadMessageFilter, int, String>(rx_filter, rx_timeout, reloadMessage.reload_message_body.RELOAD_MsgCode.ToString(), Receive));
             yield break;
         }
     }
