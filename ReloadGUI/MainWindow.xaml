@@ -1,0 +1,212 @@
+﻿<Window x:Class="ReloadGUI.GUI"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="RELOAD GUI" mc:Ignorable="d" xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" WindowState="Maximized" d:DesignHeight="911">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="30" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="400" />
+        </Grid.ColumnDefinitions>
+        <DockPanel Grid.Row="0" Grid.ColumnSpan="2" HorizontalAlignment="Left" Name="dockPanel1" VerticalAlignment="Top">
+            <ComboBox Name="overlayComboBox" VerticalAlignment="Center" HorizontalAlignment="Center" SelectionChanged="overlayComboBox_SelectionChanged">
+                <!--Add your overlays here-->
+                <ComboBoxItem Content="overlay-reload.implementers.org" IsSelected="True"/>
+            </ComboBox>
+            <RadioButton Content="GWPeer" Name="radioGWPeer" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <RadioButton Content="Peer" Name="radioPeer" Checked="radioPeer_Checked" IsChecked="True" VerticalAlignment="Center" HorizontalAlignment="Center" />
+            <RadioButton Content="Client" Name="radioClient" IsChecked="False" Checked="radioClient_Checked" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <TextBox Height="23" Name="portBox" Width="74" Text="12345" />
+            <CheckBox Content="Increment" Name="autoIncBox" IsChecked="True" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <Button Content="Start" Name="StartButton" Click="startButton_Click" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <CheckBox Content="Bootstrap" Name="bootstrapBox" IsThreeState="False" IsChecked="False" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            <CheckBox Content="Autoscroll" Height="16" Name="autoscrollBox" IsChecked="True" />
+            <Button Content="GateWay" Height="23" Name="gatewayButton" Width="75" Click="gatewayButton_Click" />
+            <CheckBox Content="Webserver" Name="webserverActiveBox" IsChecked="False" HorizontalAlignment="Center" VerticalAlignment="Center" Checked="webserverActiveBox_Checked" />
+            <!--<Button Content="States" Name="stateBox" Height="23" Width="75" Click="stateBox_Click" />-->
+        </DockPanel>
+        <TabControl Grid.Row="1" Grid.Column="0" TabStripPlacement="Left" HorizontalAlignment="Stretch" Name="tabControl" VerticalAlignment="Stretch" SelectionChanged="tabControl_SelectionChanged" Margin="0,0,0,2"></TabControl>
+        <GridSplitter Grid.Row="1" Width="5"/>
+        <Grid Grid.Row="1" Grid.Column="2" >
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid  Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Label  Grid.Column="0" Name="OverlayNameLabel" Content="OverlayName:"/>
+                    <TextBox  Grid.Column="1" Name="OverlayName" />
+                </Grid>
+                <Grid  Grid.Row="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="31.522" />
+                        <ColumnDefinition Width="119.478"/>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox  Grid.Column="0" Height="23" Name="serviceName" Text="serviceName" Grid.ColumnSpan="2" />
+                    <Button  Grid.Column="2" Content="registerService" Height="Auto" Name="redirButton" Width="Auto" Click="registerService_Click" />
+                    <Button  Grid.Column="3" Content="lookupService" Height="Auto" Name="lookupButton" Width="Auto" Click="lookupService_Click" />
+                </Grid>
+                <Grid  Grid.Row="2" >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox  Grid.Column="0" Height="Auto" Name="sipText"/>
+                    <Button Grid.Column="1"  Height="Auto" Content="fetchSIPButton" Width="Auto" Click="fetchSIPButton_Click" />
+                    <Button Grid.Column="2" Height="Auto" Content="storeSIPButton" Width="Auto" Click="storeSIPButton_Click" />
+                </Grid>
+                <Grid  Grid.Row="3" >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox  Grid.Column="0" Height="Auto" Name="imagePathText" Text="image path" />
+                    <Button Grid.Column="1"  Height="Auto" Content="Browse" Width="Auto" Click="browseImageButton_Click"/>
+                </Grid>
+                <Grid  Grid.Row="4" >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox  Grid.Column="0" Height="Auto" Name="imageNameText" Text="image1" />
+                    <Button Grid.Column="1"  Height="Auto" Content="fetchImageButton" Width="Auto" Click="fetchImageButton_Click"/>
+                    <Button Grid.Column="2" Height="Auto" Content="storeImageButton" Width="Auto" Click="storeImageButton_Click" />
+                </Grid>
+                <Grid  Grid.Row="5" >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid Grid.Column="0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Label  Grid.Column="0" Grid.Row="0" Name="loadedImageLabel" Content="Loaded Image:"/>
+                        <Button Grid.Column="0" Grid.Row="1"  Height="Auto" Content="Clear Image" Width="Auto" Click="clearLoadedImage_Click"/>
+                    </Grid>
+                    <Image Grid.Column="1" Name="loadedImageControl" Height="256" Width="256" Grid.ColumnSpan="2" />
+                </Grid>
+                <Grid  Grid.Row="6" >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid Grid.Column="0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Label  Grid.Column="0" Name="fetchedImageLabel" Content="Fetched Image:"/>
+                        <Button Grid.Column="0" Grid.Row="1"  Height="Auto" Content="Clear Image" Width="Auto" Click="clearFetchedImage_Click"/>
+                    </Grid>          
+                    <Image Grid.Column="1" Name="fetchedImageControl" Height="256" Width="256" />
+                </Grid>
+                <Grid  Grid.Row="7" >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Label  Grid.Column="0" Name="GUILabel" Content="Update GUI:"/>
+                    <Button Grid.Column="1"  Content="ClearAllLog" Height="23" Name="clearLogButton" Width="75" Click="clearLogButton_Click" />
+                    <Button  Grid.Column="2" Content="Refresh" Height="23" Name="refreshButton" Width="75" Click="refreshButton_Click" />
+                </Grid>
+                <!--<StackPanel Name="stackPanel1" >
+
+                    <Button Content="ClearAllLog" Height="23" Name="clearLogButton" Width="75" Click="clearLogButton_Click" />
+                    <Button Content="REFRESH" Height="23" Name="refreshButton" Width="75" Click="refreshButton_Click" />
+                    <Grid Height="100" Name="grid1" Width="200" />
+                    <Button Content="HandoverKeys" Height="23" Name="handoverButton" Width="75" Click="handoverButton_Click" />
+                    <TextBox Height="23" Name="viewOverlay" Text="" />
+                </StackPanel>-->
+            </Grid>
+            <Grid  Grid.Row="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <StackPanel Grid.Row="0" Name="stackPanel1">
+                    <GroupBox HorizontalAlignment="Stretch" Header="StoredData" Name="groupBox2" VerticalAlignment="Stretch" Margin="5,0,0,0">
+                        <TreeView HorizontalAlignment="Stretch"  VerticalAlignment="Stretch"  Name="storedDataTree"/>
+                    </GroupBox>
+                </StackPanel>
+                <StackPanel Grid.Row="1" Name="stackPanel2">
+                    <GroupBox HorizontalAlignment="Stretch" Header="StoredReplicas" Name="groupBox3" VerticalAlignment="Stretch" Margin="5,0,0,0">
+                        <TreeView HorizontalAlignment="Stretch"  VerticalAlignment="Stretch"  Name="storedReplica"/>
+                    </GroupBox>
+                </StackPanel>
+                <Grid  Grid.Row="3" >
+                    <Grid.RowDefinitions>
+                        <RowDefinition></RowDefinition>
+                        <RowDefinition></RowDefinition>
+                        <RowDefinition></RowDefinition>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="300" />
+                        <ColumnDefinition Width="100" />
+                    </Grid.ColumnDefinitions>
+                    <Label Grid.Row="0" Grid.ColumnSpan="2" Content="Search Log:"></Label>
+                    <TextBox Name="FindLogTextBox" Grid.Row="1"  Grid.Column="0" Height="Auto" />
+                    <Button Name="FindLogButton" Grid.Row="1" Grid.Column="1"  Height="Auto" Content="Find" Width="Auto" Click="On_FindLogButtonClick"/>
+                    <Button Name="ClearSearchButton" Grid.Row="2" Grid.Column="1" Height="Auto" Content="Clear Search" Width="Auto" Click="On_ClearSearchButtonClick" ></Button>
+                </Grid>
+            </Grid>
+        </Grid>
+        <Popup Width="1000" Height="500" AllowsTransparency="True" Name="Popup" IsOpen="false" PlacementTarget="{Binding ElementName=tabControl}" Placement="Center">
+            <Grid Background="BurlyWood">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Label Grid.Row="0" Grid.Column ="0" Content="Store Successful!!!"/>
+                <Label Grid.Row="1" Grid.Column ="0" Content="Resource-Id: "/>
+                <TextBlock Grid.Row="1" Grid.Column ="1" Name="resid"/>
+                <Label Grid.Row="2" Grid.Column ="0" Content="Content: "/>
+                <TextBlock Grid.Row="2" Grid.Column ="1" Name="content"/>
+                <Label Grid.Row="3" Grid.Column ="0" Content="TotalStores: "/>
+                <TextBlock Grid.Row="3" Grid.Column ="1" Name="total" FontSize="72" />
+                <!--<Label Grid.Row="4" Grid.Column ="0" Content="TotalStores: "/>
+                <TextBlock Grid.Row="4" Grid.Column ="1" Name="total"/>-->
+                <Image Grid.Row="4" Grid.Column ="0" Source="logo.jpg"></Image>
+            </Grid>
+        </Popup>
+    </Grid>
+</Window>
