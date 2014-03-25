@@ -34,7 +34,28 @@
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Microsoft.Ccr.Core">
+    <Reference Include="CertificatesToDBandBack, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\Extern\CertificatesToDBandBack\CertificatesToDBandBack.dll</HintPath>
+    </Reference>
+    <Reference Include="Client, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\Extern\STUN\Client.dll</HintPath>
+    </Reference>
+    <Reference Include="Core, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\Extern\STUN\Core.dll</HintPath>
+    </Reference>
+    <Reference Include="DnDns, Version=1.0.1.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\Extern\DnDns\DnDns.dll</HintPath>
+    </Reference>
+    <Reference Include="ManagedOpenSsl, Version=0.6.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\Extern\ManagedOpenSsl\ManagedOpenSsl.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Ccr.Core, Version=4.0.261.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
       <HintPath>..\Extern\CCR\Microsoft.Ccr.Core.dll</HintPath>
     </Reference>
     <Reference Include="System" />
@@ -45,9 +66,14 @@
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
+    <Reference Include="UPnP, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\Extern\UPnP\UPnP.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RELOAD\ForwardAndLinkManagement\ICE.cs" />
     <Compile Include="RELOAD\Topology\AccessControl.cs" />
     <Compile Include="RELOAD\Usage\ImageStoreUsage.cs" />
     <Compile Include="RELOAD\Util\BigInt.cs" />
@@ -72,25 +98,14 @@
     <Compile Include="RELOAD\ForwardAndLinkManagement\TLS.FLM.cs" />
     <Compile Include="RELOAD\Usage\ReDiR.cs" />
     <Compile Include="RELOAD\Topology\Signature.cs" />
+    <Compile Include="RELOAD\Util\NetworkByteArray.cs" />
     <Compile Include="RELOAD\Util\Statistics.cs" />
     <Compile Include="RELOAD\Topology\Topology.cs" />
     <Compile Include="RELOAD\Transport\Transport.cs" />
     <Compile Include="RELOAD\Usage\Usages.cs" />
+    <Compile Include="RELOAD\Util\ThreadSafeDictionary.cs" />
+    <Compile Include="RELOAD\Util\TimeoutSocket.cs" />
     <Compile Include="RELOAD\Util\Utils.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\CertificatesToDBandBack\CertificatesToDBandBack.csproj">
-      <Project>{5fc9bf95-63cd-4538-86ed-17bec144dbea}</Project>
-      <Name>CertificatesToDBandBack</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\DnDns\DnDns.csproj">
-      <Project>{df6f2bd7-fa28-44ae-b7d8-fd62832afd01}</Project>
-      <Name>DnDns</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\ManagedOpenSsl\ManagedOpenSsl-2010.csproj">
-      <Project>{73dcc218-655b-485f-8eac-0ce5f2f7343d}</Project>
-      <Name>ManagedOpenSsl-2010</Name>
-    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
