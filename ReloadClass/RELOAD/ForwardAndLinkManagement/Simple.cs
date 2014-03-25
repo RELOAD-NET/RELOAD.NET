@@ -63,6 +63,13 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement {
 
     ReloadConfig m_ReloadConfig = null;
 
+    // markus, just a dummy here
+    public void StartReloadTLSServer(Socket socket) { }
+    public void StartReloadTLSClient(NodeId nodeid, Socket socket) { }
+    public void SaveConnection(CandidatePair choosenPair) { }
+    public Socket GetConnection(CandidatePair choosenPair) { throw new NotImplementedException(); }
+    public Util.ThreadSafeDictionary<IceCandidate, ReloadSendParameters> GetConnectionQueue() { throw new NotImplementedException(); }
+
     /// <summary>
     /// Provides connection table info.
     /// </summary>

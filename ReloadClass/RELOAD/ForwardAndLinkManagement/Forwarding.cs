@@ -241,13 +241,13 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement {
 
             reloadMsg.LastHopNodeId = m_topology.LocalNode.Id;
 
-            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING,
-              String.Format("==> forwarding: {0} from {1} ==> {2}  Dest={3} TransID={4:x16}",
-              reloadMsg.reload_message_body.RELOAD_MsgCode.ToString().PadRight(16, ' '),
-              reloadMsg.OriginatorID, NextHopNode.ToString(), dest.ToString(),
-              reloadMsg.TransactionID));
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING,
+                  String.Format("==> forwarding: {0} from {1} ==> {2}  Dest={3} TransID={4:x16}",
+                  reloadMsg.reload_message_body.RELOAD_MsgCode.ToString().PadRight(16, ' '),
+                  reloadMsg.OriginatorID, NextHopNode.ToString(), dest.ToString(),
+                  reloadMsg.TransactionID));
 
-            m_transport.send(reloadMsg, NextHopNode);
+                m_transport.send(reloadMsg, NextHopNode);
           }
           break;
         case DestinationType.resource: {
@@ -287,13 +287,13 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement {
               else
                 reloadMsg.RemoveFirstDestEntry();
 
-              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING,
-                String.Format("==> forwarding: {0} from {1} ==> {2} Dest={3} TransID={4:x16}",
-                reloadMsg.reload_message_body.RELOAD_MsgCode.ToString().PadRight(16, ' '),
-                reloadMsg.OriginatorID, NextHopNode.ToString(), dest.ToString(),
-                reloadMsg.TransactionID));
-              /*  don't use create_reload* as it puts via header to destination   */
-              m_transport.send(reloadMsg, NextHopNode);
+                  m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING,
+                    String.Format("==> forwarding: {0} from {1} ==> {2} Dest={3} TransID={4:x16}",
+                    reloadMsg.reload_message_body.RELOAD_MsgCode.ToString().PadRight(16, ' '),
+                    reloadMsg.OriginatorID, NextHopNode.ToString(), dest.ToString(),
+                    reloadMsg.TransactionID));
+                  /*  don't use create_reload* as it puts via header to destination   */
+                  m_transport.send(reloadMsg, NextHopNode);
             }
           }
           break;

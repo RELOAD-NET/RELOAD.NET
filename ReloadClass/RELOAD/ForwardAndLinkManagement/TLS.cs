@@ -22,6 +22,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 
@@ -36,19 +37,18 @@ using System.Security.Cryptography;
 using System.Runtime.InteropServices;
 using System.Xml.Serialization;
 
-using SBSSLCommon;
-using SBServer;
-using SBUtils;
-using SBX509;
-using SBCustomCertStorage;
-using SBClient;
-using SBDTLSClient;
-using SBPKCS10;
+using System.Net.Security;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
 
 using TSystems.RELOAD;
 using TSystems.RELOAD.Topology;
 using TSystems.RELOAD.Transport;
 using TSystems.RELOAD.Utils;
+
+using System.Threading;
+using System.Threading.Tasks;
+
 
 namespace TSystems.RELOAD.ForwardAndLinkManagement
 {
@@ -73,6 +73,10 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
 
         private ReloadConfig m_ReloadConfig = null;
 
+        /* Prevent concurrent writing access */
+        //ConcurrentQueue<byte[]> writePendingData = new ConcurrentQueue<byte[]>();
+        //bool sendingData = false;
+
 
         #region Tasks
 
@@ -96,18 +100,20 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
             if (ReloadGlobals.FRAGMENTATION == true)
                 ListenSocket.NoDelay = true; //--joscha no nagle
             ListenSocket.Bind(localEndPoint);
+
+            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TRANSPORT, String.Format("TLS_S: Waiting for connections on port {0}", port));
+
             ListenSocket.Listen(1024);
 
             m_ListenerSocket = ListenSocket;
 
-            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TRANSPORT, String.Format("TLS_S: Waiting for connections on port {0}", port));
-
-            while (m_ReloadConfig.State  < ReloadConfig.RELOAD_State.Shutdown)
+            while (m_ReloadConfig.State < ReloadConfig.RELOAD_State.Shutdown)
             {
                 var iarPort = new Port<IAsyncResult>();
                 Socket associatedSocket = null;
                 ListenSocket.BeginAccept(iarPort.Post, null);
-                yield return Arbiter.Receive(false, iarPort, iar => 
+
+                yield return Arbiter.Receive(false, iarPort, iar =>
                 {
                     try
                     {
@@ -118,34 +124,103 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                         associatedSocket = null;
                     }
                 });
-                
-                /* Setup new TLS Server */
-                ReloadTLSServer reload_server = new ReloadTLSServer(associatedSocket);
-                if (ReloadGlobals.only_RSA_NULL_MD5 == true) {
-                  for (short i = 0; i < 107; i++) {
-                    reload_server.set_CipherSuites(i, false);
-                  }
-                  reload_server.set_CipherSuites(SBConstants.__Global.SB_SUITE_RSA_NULL_MD5, true);
-                }
-                //reload_client.Enabled = !ReloadGlobals.TLS_PASSTHROUGH; --joscha
-                reload_server.Enabled = true;   //--joscha
-                reload_server.ForceCertificateChain = false;
-                reload_server.ClientAuthentication = true;
-                reload_server.Versions = SBConstants.Unit.sbSSL2 | SBConstants.Unit.sbSSL3 | SBConstants.Unit.sbTLS1 | SBConstants.Unit.sbTLS11;
-                reload_server.CertStorage = m_ReloadConfig.ReloadLocalCertStorage;
-                reload_server.OnOpenConnection += new TSBOpenConnectionEvent(SBB_OnOpenConnection);
-                reload_server.OnData += new TSBDataEvent(SBB_OnData);
-                reload_server.OnSend += new TSBSendEvent(SBB_OnSend);
-                reload_server.OnError += new TSBErrorEvent(SBB_OnError);
-                reload_server.OnCertificateValidate += new TSBCertificateValidateEvent(SBB_OnCertificateValidate);
-                reload_server.OnReceive += new TSBReceiveEvent(SBB_OnReceive);
 
-                /* Add or update connection list */
-                //TKTODO needed? m_connection_table.updateEntry(reload_server);
-                reload_server.Open();
+                // code encapsulated in method for easy reuse in ICE processing
+                InitReloadTLSServer(associatedSocket);
+            }
+        }
+
+        public void InitReloadTLSServer(Socket associatedSocket)
+        {
+            ReloadTLSServer reload_server = new ReloadTLSServer(associatedSocket);
+
+            reload_server.AssociatedClient = new TcpClient();
+            reload_server.AssociatedClient.Client = reload_server.AssociatedSocket;
+
+            /* Setup new SSL Stream */
+            SslStream ReceiverSslStream = null;
+
+            // A client has connected
+            try
+            {
+                ReceiverSslStream = new SslStream(reload_server.AssociatedClient.GetStream(), false);
+
+                reload_server.AssociatedSslStream = ReceiverSslStream;
+
+                // Authenticate the server and require the client to authenticate also
+
+                //reload_server.AssociatedSslStream.BeginAuthenticateAsServer(
+                //    m_ReloadConfig.MyNetCertificate,    // Client Certificate
+                //    true,                               // Require Certificate from connecting Peer
+                //    SslProtocols.Tls,                   // Use TLS 1.0
+                //    false,                              // check Certificate revokation
+                //    iarPort.Post,                       // Callback handler
+                //    null                                // Object passed to Callback handler
+                //);
+                if (reload_server.AssociatedSocket.Connected)
+                {
+                    try
+                    {
+                        reload_server.AssociatedSslStream.AuthenticateAsServer(
+                            m_ReloadConfig.MyCertificate,    // Client Certificate
+                            true,                               // Require Certificate from connecting Peer
+                            SslProtocols.Tls,                   // Use TLS 1.0
+                            false                               // check Certificate revocation
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, ex.Message);
+                    }
+                }
+
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("TLS_S: TLS Connection established: Protocol: {0}, Key exchange: {1} strength {2}, Hash: {3} strength {4}, Cipher: {5} strength {6}, IsEncrypted: {7}, IsSigned: {8}",
+                  reload_server.AssociatedSslStream.SslProtocol,
+                  reload_server.AssociatedSslStream.KeyExchangeAlgorithm, reload_server.AssociatedSslStream.KeyExchangeStrength,
+                  reload_server.AssociatedSslStream.HashAlgorithm, reload_server.AssociatedSslStream.HashStrength,
+                  reload_server.AssociatedSslStream.CipherAlgorithm, reload_server.AssociatedSslStream.CipherStrength,
+                  reload_server.AssociatedSslStream.IsEncrypted, reload_server.AssociatedSslStream.IsSigned));
+
+                X509Certificate2 remoteCert = new X509Certificate2(reload_server.AssociatedSslStream.RemoteCertificate);
+                CertificateValidate(reload_server, remoteCert);
+
+            }
+            catch (AuthenticationException ex)
+            {
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Exception: {0}", ex.Message));
+
+                if (ex.InnerException != null)
+                {
+                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Inner exception: {0}", ex.InnerException.Message));
+                }
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Authentication failed - closing the connection."));
+                reload_server.AssociatedSslStream.Close();
+                reload_server.AssociatedClient.Close();
+            }
+            catch (Exception ex)
+            {
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Receiving data failed: {0}", ex.Message));
+            }
+
+            if (associatedSocket != null)
+            {
+                OnOpenConnection(reload_server);
+
+                //yield return Arbiter.Receive(false, iarPort, iar =>
+                //{
+                //    try
+                //    {
+                //        reload_server.AssociatedSslStream.EndAuthenticateAsServer(iar);
+                //    }
+                //    catch (Exception ex)
+                //    {
+                //        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Ending the Authentification (Server Side) failed: {0}", ex.Message));
+                //    }
+                //});
+
                 Arbiter.Activate(m_DispatcherQueue, new IterativeTask<object>(reload_server, linkReceive));
-                if (associatedSocket != null)
-                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_SOCKET, String.Format("TLS_S: {0}, Accepted client {1}", reload_server.GetHashCode(), associatedSocket.RemoteEndPoint));
+
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_SOCKET, String.Format("TLS_S: {0}, Accepted client {1}", ReceiverSslStream.GetHashCode(), associatedSocket.RemoteEndPoint));
             }
         }
 #endif
@@ -158,45 +233,169 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
         private IEnumerator<ITask> linkReceive(object secure_object)
         {
             IAssociation association = (IAssociation)secure_object;
-            while (m_ReloadConfig.State  < ReloadConfig.RELOAD_State.Exit)
+            while (m_ReloadConfig.State < ReloadConfig.RELOAD_State.Exit)
             {
+
+                // Port<IAsyncResult>: It enqueues messages and keeps track of receivers that can consume messages.
+                // IAsyncResult: Type for messages that can be enqueued - Represents the status of an asynchronous operation.
                 var iarPort = new Port<IAsyncResult>();
                 int bytesReceived = 0;
+                NetworkStream ns = null;
 
-                association.AssociatedSocket.BeginReceive(
-                    association.InputBuffer,
-                    association.InputBufferOffset,
-                    association.InputBuffer.Length - association.InputBufferOffset,
-                    SocketFlags.None, iarPort.Post, null);
-                
-                yield return Arbiter.Receive(false, iarPort, iar => 
+                // try to get NetworkStream
+                if (association.AssociatedClient.Connected)
                 {
                     try
                     {
-                        bytesReceived = association.AssociatedSocket.EndReceive(iar);
+                        ns = association.AssociatedClient.GetStream();
+                    }
+                    catch (Exception ex)
+                    {
+                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "Get NetworkStream: " + ex.Message);
+                    }
+                }
+
+                // Asynchronously receive data from socket
+                // BeginReceive(StorageLocation, PositionInStorageLocation, NumberBytesToReceive, Flags, AsyncCallbackDelegate, State);
+                // Callback: iarPort.Post = Enqueues a message instance (this?)
+
+
+                // first we have to read the RFC 4571 framing header (16 bit) out of NetworkStream
+                byte[] rfc4571Header = new byte[2];
+
+                try
+                {
+                    if (ns == null)
+                    {
+                    }
+
+                    ns.BeginRead(
+                        rfc4571Header,
+                        0,
+                        2,
+                        iarPort.Post,
+                        null);
+                }
+                catch (Exception ex)
+                {
+                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "Error reading RFC 4571 framing header: " + ex.Message);
+                }
+
+
+                yield return Arbiter.Receive(false, iarPort, iar =>
+                {
+                    try
+                    {
+                        if (association.AssociatedClient.Connected) // TEST
+                            bytesReceived = association.AssociatedClient.GetStream().EndRead(iar);
+
                     }
                     catch
                     {
                         bytesReceived = 0;
                     }
                 });
-                    
+
+
+                // convert RFC 4571 byte header to uint16 
+                UInt16 rfc4571Header_uint16 = NetworkByteArray.ReadUInt16(rfc4571Header, 0);
+
+                // try to get the message
+                try
+                {
+                    // Reload message
+                    if (rfc4571Header_uint16 != 0)
+                    {
+                        association.AssociatedSslStream.BeginRead(
+                        association.InputBuffer,
+                        association.InputBufferOffset,
+                        association.InputBuffer.Length - association.InputBufferOffset,
+                        iarPort.Post,
+                        null);
+                    }
+
+                    // STUN message
+                    else if (rfc4571Header_uint16 == 0)
+                    {
+                        // TODO: lese STUN Msg von NetworkStream
+                    }
+
+
+                }
+                catch (Exception ex)
+                {
+                    if (ex is SocketException)
+                    {
+                        HandleRemoteClosing(association.AssociatedSslStream, association.AssociatedClient);
+                    }
+                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "Send: " + ex.Message);
+
+                }
+
+                // Creates a single item receiver
+                // Execute handler on message arrival
+                yield return Arbiter.Receive(false, iarPort, iar =>
+                {
+                    try
+                    {
+                        // Reload message
+                        if (rfc4571Header_uint16 != 0)
+                        {
+                            bytesReceived = association.AssociatedSslStream.EndRead(iar);
+                        }
+
+                        // STUN message
+                        else if (rfc4571Header_uint16 == 0)
+                        {
+                            bytesReceived = association.AssociatedClient.GetStream().EndRead(iar);
+                        }
+
+
+                    }
+                    catch
+                    {
+                        bytesReceived = 0;
+                    }
+                });
+
 
                 if (bytesReceived <= 0)
                 {
-                    HandleRemoteClosing(association.AssociatedSocket);
-                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_BUG, String.Format("linkReceive: {0}, connection closed", association.GetHashCode()));
-                    break;
+                    // Close Socket if exception was thrown or stream is closed
+                    //HandleRemoteClosing(association.AssociatedSslStream, association.AssociatedClient);
+                    //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_BUG, String.Format("linkReceive: {0}, connection closed", association.AssociatedSslStream.GetHashCode()));
+                    //break;
+
+                    Thread.Yield();
+
                 }
 
                 association.InputBufferOffset += bytesReceived;
                 while (association.InputBufferOffset > 0)
                 {
+
+                    int len = Math.Min(association.InputBuffer.Length, association.InputBufferOffset);
+                    association.InputBufferOffset -= len;
+
+                    m_ReloadConfig.Statistics.BytesRx = (ulong)len;
+
+                    if (len == 0)
+                    {
+                        association.InputBufferOffset = 0;
+                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "SBB_OnReceive: Clearing association InputBuffer on MaxSize=0");
+                    }
+
+                    if (association.InputBufferOffset > 0)
+                        Buffer.BlockCopy(association.InputBuffer, len, association.InputBuffer, 0, association.InputBufferOffset);
+
+                    // Forward Data to SBB to decrypt
                     if (association.AssociatedSocket.Connected)
-                        association.TLSDataAvailable();
+
+                        OnData(association);
+
                     else
                     {
-                        HandleRemoteClosing(association.AssociatedSocket);
+                        HandleRemoteClosing(association.AssociatedSslStream, association.AssociatedClient);
                         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_BUG, String.Format("linkReceive: {0}, connection broken", association.GetHashCode()));
                         break;
                     }
@@ -212,15 +411,23 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
         /// <param name="port">The port.</param>
         /// <param name="buffer">The buffer.</param>
         /// <returns></returns>
-        private IEnumerator<ITask> linkSend(Node node, ReloadSendParameters send_params)
+        private IEnumerator<ITask> linkSend(Node node, ReloadSendParameters send_params)    // node is remote peer
         {
+            // connectionTableEntry is only null if NO ICE is used, or the remote node is a bootstrap ( see TLS.FLM.Send() ) 
             if (send_params.connectionTableEntry == null)
             {
+                ////if (ReloadGlobals.UseNoIce || node.Id == null)
+
+
+                //// if remote peer is a bootstrap, we don't need ICE procedures
+                //if (ReloadGlobals.UseNoIce || remoteIsBS)
+                //{
+
                 /* No open connection, open new connection */
                 Socket socket = new Socket(send_params.destinationAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
 
 #if !WINDOWS_PHONE
-				// Socket.Handle is not supported by WP7
+                // Socket.Handle is not supported by WP7
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_SOCKET, String.Format("TLS_C: Connect socket {0}, {1}:{2}", socket.Handle, send_params.destinationAddress, send_params.port));
 #endif
 
@@ -245,75 +452,191 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
 
                     }
                 });
-                if (connectError) 
+                if (connectError)
                 {
                     send_params.done.Post(true);    //--joscha
                     yield break;
                 }
 
-                ReloadTLSClient reload_client = new ReloadTLSClient(socket);
-                if (ReloadGlobals.only_RSA_NULL_MD5 == true) {
-                  for (short i = 0; i < 107; i++) {
-                    reload_client.set_CipherSuites(i, false);
-                  }
-                  reload_client.set_CipherSuites(SBConstants.__Global.SB_SUITE_RSA_NULL_MD5, true);
-                }
-                //reload_client = new ReloadTLSClient(socket);
-                //reload_client.Enabled = !ReloadGlobals.TLS_PASSTHROUGH; --joscha
-                reload_client.Versions = SBConstants.Unit.sbSSL2 | SBConstants.Unit.sbSSL3 | SBConstants.Unit.sbTLS1 | SBConstants.Unit.sbTLS11;
-                reload_client.ClientCertStorage = m_ReloadConfig.ReloadLocalCertStorage;
-
-                reload_client.OnOpenConnection += new SBSSLCommon.TSBOpenConnectionEvent(SBB_OnOpenConnection);
-                reload_client.OnData += new SBSSLCommon.TSBDataEvent(SBB_OnData);
-                reload_client.OnSend += new SBSSLCommon.TSBSendEvent(SBB_OnSend);
-                reload_client.OnReceive += new SBSSLCommon.TSBReceiveEvent(SBB_OnReceive);
-                reload_client.OnCertificateValidate += new SBSSLCommon.TSBCertificateValidateEvent(SBB_OnCertificateValidate);
-                reload_client.OnError += new SBSSLCommon.TSBErrorEvent(SBB_OnError);
-
-                Arbiter.Activate(m_DispatcherQueue, new IterativeTask<object>(reload_client, linkReceive));
-                reload_client.TLSConnectionOpen = new Port<bool>();
-
-                reload_client.Open();
-
-                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_SOCKET, String.Format("TLS_C: SBB client object {0}", reload_client.GetHashCode()));
-
-                //if (!ReloadGlobals.TLS_PASSTHROUGH) --joscha
-                {
-                    bool isOpen = false;
-                    yield return Arbiter.Receive(false, reload_client.TLSConnectionOpen, result => { isOpen = result; });
-
-                    if (!isOpen)
-                    {
-                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_C: Error Timeout"));
-                        if (ReloadFLMEventHandler != null)
-                            ReloadFLMEventHandler(this, new ReloadFLMEventArgs(ReloadFLMEventArgs.ReloadFLMEventTypes.RELOAD_EVENT_STATUS_CONNECT_FAILED, null, null));
-                        send_params.done.Post(true); // --joscha
-                        yield break;
-                    }
-                }
-
-                /* Add/update connection list */
-                send_params.connectionTableEntry = m_connection_table.updateEntry(reload_client);
-
-                if (ReloadGlobals.FRAGMENTATION == true)
-                {
-                    socket.NoDelay = true; //--joscha no nagle
-                }
+                // code encapsulated in method for easy reuse in ICE processing
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("linkSend: Authenticating as Client on {0}", socket.LocalEndPoint));
+                InitReloadTLSClient(send_params, socket);
+                                
             }
 
             send_params.done.Post(true); // connection attempt for send_params is finished --joscha
 
             if (send_params.frame)
                 send_params.buffer = addFrameHeader(send_params.connectionTableEntry, send_params.buffer);
-  
+
             IAssociation association = ((IAssociation)send_params.connectionTableEntry.secureObject);
             if (association.TLSConnectionIsOpen)
             {
-                association.TLSSendData(send_params.buffer);
+                Send(association, send_params.buffer);
                 send_params.connectionTableEntry.LastActivity = DateTime.Now;    /* Re-trigger activity timer */
             }
             else
                 association.TLSConnectionWaitQueue.Enqueue(send_params.buffer);
+        }
+
+        private IEnumerator<ITask> ICElinkSend(Node node, ReloadSendParameters send_params)    // node is remote peer
+        {
+            // connectionTableEntry is only null if NO ICE is used, or the remote node is a bootstrap ( see TLS.FLM.Send() ) 
+            if (send_params.connectionTableEntry == null)
+            {               
+
+//                /* No open connection, open new connection */
+//                Socket socket = new Socket(send_params.destinationAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+
+//#if !WINDOWS_PHONE
+//                // Socket.Handle is not supported by WP7
+//                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_SOCKET, String.Format("TLS_C: Connect socket {0}, {1}:{2}", socket.Handle, send_params.destinationAddress, send_params.port));
+//#endif
+
+//                var iarPort = new Port<IAsyncResult>();
+//                socket.BeginConnect(new IPEndPoint(send_params.destinationAddress, send_params.port), iarPort.Post, null);
+
+//                bool connectError = false;
+//                yield return Arbiter.Receive(false, iarPort, iar =>
+//                {
+//                    try
+//                    {
+//                        socket.EndConnect(iar);
+//                    }
+//                    catch (Exception ex)
+//                    {
+//                        HandleRemoteClosing(node);
+//                        connectError = true;
+//                        m_ReloadConfig.Statistics.IncConnectionError();
+//                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, ex.Message);
+//                        if (ReloadFLMEventHandler != null)
+//                            ReloadFLMEventHandler(this, new ReloadFLMEventArgs(ReloadFLMEventArgs.ReloadFLMEventTypes.RELOAD_EVENT_STATUS_CONNECT_FAILED, null, null));
+
+//                    }
+//                });
+//                if (connectError)
+//                {
+//                    send_params.done.Post(true);    //--joscha
+//                    yield break;
+//                }
+
+
+                if (send_params.connectionSocket != null && send_params.connectionSocket.Connected)
+                {
+                    // code encapsulated in method for easy reuse in ICE processing
+                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("ICElinkSend: Authenticating as Client on {0}", send_params.connectionSocket.LocalEndPoint));
+                    InitReloadTLSClient(send_params, send_params.connectionSocket);
+                }
+                else
+                {
+                    
+                    HandleRemoteClosing(node);
+                    //connectError = true;
+                    m_ReloadConfig.Statistics.IncConnectionError();
+                    //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, ex.Message);
+                    if (ReloadFLMEventHandler != null)
+                        ReloadFLMEventHandler(this, new ReloadFLMEventArgs(ReloadFLMEventArgs.ReloadFLMEventTypes.RELOAD_EVENT_STATUS_CONNECT_FAILED, null, null));
+                    send_params.done.Post(true);    //--joscha
+                    yield break;
+                }
+
+                                
+            }
+
+            send_params.done.Post(true); // connection attempt for send_params is finished --joscha
+
+            if (send_params.frame)
+                send_params.buffer = addFrameHeader(send_params.connectionTableEntry, send_params.buffer);
+
+            IAssociation association = ((IAssociation)send_params.connectionTableEntry.secureObject);
+            if (association.TLSConnectionIsOpen)
+            {
+                Send(association, send_params.buffer);
+                send_params.connectionTableEntry.LastActivity = DateTime.Now;    /* Re-trigger activity timer */
+            }
+            else
+                association.TLSConnectionWaitQueue.Enqueue(send_params.buffer);
+        }
+
+        public void InitReloadTLSClient(ReloadSendParameters send_params, Socket socket)
+        {
+            ReloadTLSClient reload_client = new ReloadTLSClient(socket);
+
+            reload_client.AssociatedClient = new TcpClient();
+            reload_client.AssociatedClient.Client = reload_client.AssociatedSocket;
+
+            /* Setup new SSL Stream */
+
+            SslStream SenderSslStream = new SslStream(reload_client.AssociatedClient.GetStream(), false);
+
+            reload_client.AssociatedSslStream = SenderSslStream;
+
+            reload_client.TLSConnectionOpen = new Port<bool>();
+
+            // Client Authentification
+            try
+            {
+                X509Certificate2Collection certificates = new X509Certificate2Collection();
+                certificates.Add(m_ReloadConfig.MyCertificate);
+                certificates.Add(m_ReloadConfig.RootCertificate);
+
+                //String remoteClient = "reload:" + send_params.destinationAddress.ToString() + ":" + send_params.port.ToString();
+                String remoteClient = "reload";
+
+                // The server name must match the name on the server certificate. 
+                reload_client.AssociatedSslStream.AuthenticateAsClient(remoteClient, certificates, SslProtocols.Tls, false);
+
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("TLS_C: TLS Connection established: Protocol: {0}, Key exchange: {1} strength {2}, Hash: {3} strength {4}, Cipher: {5} strength {6}, IsEncrypted: {7}, IsSigned: {8}",
+                    reload_client.AssociatedSslStream.SslProtocol,
+                    reload_client.AssociatedSslStream.KeyExchangeAlgorithm, reload_client.AssociatedSslStream.KeyExchangeStrength,
+                    reload_client.AssociatedSslStream.HashAlgorithm, reload_client.AssociatedSslStream.HashStrength,
+                    reload_client.AssociatedSslStream.CipherAlgorithm, reload_client.AssociatedSslStream.CipherStrength,
+                    reload_client.AssociatedSslStream.IsEncrypted, reload_client.AssociatedSslStream.IsSigned));
+
+                X509Certificate2 remoteCert = new X509Certificate2(reload_client.AssociatedSslStream.RemoteCertificate);
+                CertificateValidate(reload_client, remoteCert);
+            }
+            catch (AuthenticationException ex)
+            {
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Exception: {0}", ex.Message));
+
+                if (ex.InnerException != null)
+                {
+                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Inner exception: {0}", ex.InnerException.Message));
+                }
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Authentication failed - closing the connection."));
+                reload_client.AssociatedSslStream.Close();
+                reload_client.AssociatedClient.Close();
+            }
+
+            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_SOCKET, String.Format("TLS_C: SBB client object {0}", reload_client.GetHashCode()));
+
+            Arbiter.Activate(m_DispatcherQueue, new IterativeTask<object>(reload_client, linkReceive));
+
+            OnOpenConnection(reload_client);
+
+            //if (!ReloadGlobals.TLS_PASSTHROUGH) --joscha
+            //{
+            //    bool isOpen = false;
+            //    yield return Arbiter.Receive(false, reload_client.TLSConnectionOpen, result => { isOpen = result; });
+
+            //    if (!isOpen)
+            //    {
+            //        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_C: Error Timeout"));
+            //        if (ReloadFLMEventHandler != null)
+            //            ReloadFLMEventHandler(this, new ReloadFLMEventArgs(ReloadFLMEventArgs.ReloadFLMEventTypes.RELOAD_EVENT_STATUS_CONNECT_FAILED, null, null));
+            //        send_params.done.Post(true); // --joscha
+            //        yield break;
+            //    }
+            //}
+
+            /* Add/update connection list */
+            send_params.connectionTableEntry = m_connection_table.updateEntry(reload_client);
+
+            if (ReloadGlobals.FRAGMENTATION == true)
+            {
+                reload_client.AssociatedSocket.NoDelay = true; //--joscha no nagle
+            }
         }
 
         private void HandleRemoteClosing(Node node)
@@ -322,19 +645,23 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 m_ReloadConfig.ThisMachine.Transport.InboundClose(node.Id);
         }
 
-        private void HandleRemoteClosing(Socket client)
+        private void HandleRemoteClosing(SslStream stream, TcpClient client)
         {
             lock (m_connection_table)
             {
                 foreach (KeyValuePair<String, ReloadConnectionTableEntry> entry in m_connection_table)
                 {
                     IAssociation association = (IAssociation)entry.Value.secureObject;
-                    if (association.AssociatedSocket == client)
+                    if (association.AssociatedSslStream == stream)
                     {
                         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_SOCKET, String.Format("TLS_C: lost connection to {0} cleaning connection table", entry));
 
                         m_connection_table.Remove(entry.Key);
                         m_ReloadConfig.ThisMachine.Transport.InboundClose(entry.Value.NodeID);
+
+                        stream.Close();
+                        client.Close();
+
                         return;
                     }
                 }
@@ -342,25 +669,10 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
         }
         #endregion
 
-        #region SBB Eventhandlers
-        private void SBB_OnOpenConnection(object Sender)
+        private void OnOpenConnection(object Sender)
         {
             m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TLS, String.Format("TLS_{0}: TLS connection opened", Sender is ReloadTLSServer ? "S" : "C"));
-            if (ReloadGlobals.TLS_PASSTHROUGH == true) {
-              if (Sender is ReloadTLSServer)//hack for ReloadGlobals.TLS_PASSTHROUGH
-            {
-                ReloadTLSServer server = ((ReloadTLSServer)Sender);
-                server.Enabled = false;
-                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_S SBB_OnOpenConnection: SSL DISABLED"));
 
-              }
-              if (Sender is ReloadTLSClient)//hack for ReloadGlobals.TLS_PASSTHROUGH
-            {
-                ReloadTLSClient client = ((ReloadTLSClient)Sender);
-                client.Enabled = false;
-                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_C SBB_OnOpenConnection: SSL DISABLED"));
-              }
-            }
             IAssociation association = ((IAssociation)Sender);
             association.TLSConnectionIsOpen = true;
 
@@ -372,39 +684,65 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
             foreach (object o in association.TLSConnectionWaitQueue)
             {
                 byte[] b = (byte[])o;
-                association.TLSSendData(b);
+                Send(association, b);
             }
         }
 
         /// <summary>
-        /// SBB has some bytes for the user
+        /// process the received data
         /// </summary>
         /// <param name="Sender">The sender.</param>
-        /// <param name="Buffer">The buffer.</param>
-        private void SBB_OnData(object Sender, byte[] Buffer)
+        private void
+            OnData(object Sender)
         {
-/*            ++ReloadGlobals.DbgPacketCount;
-            File.WriteAllBytes(@"C:\Temp\RELOAD\data0001.dmpa" + ReloadGlobals.DbgPacketCount.ToString("0000") + ".dmp", Buffer);
+            /*            ++ReloadGlobals.DbgPacketCount;
+                        File.WriteAllBytes(@"C:\Temp\RELOAD\data0001.dmpa" + ReloadGlobals.DbgPacketCount.ToString("0000") + ".dmp", Buffer);
             
-            //TKTEST
-            if (Buffer.Length > 500)
-              Buffer = File.ReadAllBytes(@"C:\Temp\RELOAD\data0001.dmp");
-   */
+                        //TKTEST
+                        if (Buffer.Length > 500)
+                          Buffer = File.ReadAllBytes(@"C:\Temp\RELOAD\data0001.dmp");
+               */
+            IAssociation association = (IAssociation)Sender;
+            byte[] Buffer = null;
+
+            if (association.InputBuffer[0] == 128) // Data Frame
+            {
+                byte[] len_message = new byte[4];
+                len_message[0] = association.InputBuffer[7];
+                len_message[1] = association.InputBuffer[6];
+                len_message[2] = association.InputBuffer[5];
+                len_message[3] = 0;
+
+                // + 8 for header fields
+                UInt32 length = BitConverter.ToUInt32(len_message, 0) + 8;
+
+                Buffer = new byte[length];
+                Array.Copy(association.InputBuffer, Buffer, length);
+            }
+            if (association.InputBuffer[0] == 129) // Ack Frame
+            {
+                Buffer = new byte[9]; // sizeof(FramedMessageAck)
+                Array.Copy(association.InputBuffer, Buffer, 9);
+            }
+
+            //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("Received {0} Bytes", Buffer.Length));
+
             try
             {
-              byte[] temp_buf = null;
-              if (receive_buffer != null) {
-                temp_buf = new byte[Buffer.Length + receive_buffer.Length];
+                byte[] temp_buf = null;
+                if (receive_buffer != null)
+                {
+                    temp_buf = new byte[Buffer.Length + receive_buffer.Length];
 
-                Array.Copy(receive_buffer, 0, temp_buf, 0, receive_buffer.Length);
-                Array.Copy(Buffer, 0, temp_buf, receive_buffer.Length, Buffer.Length);
-                Buffer = temp_buf;
-                receive_buffer = null;
-              }
+                    Array.Copy(receive_buffer, 0, temp_buf, 0, receive_buffer.Length);
+                    Array.Copy(Buffer, 0, temp_buf, receive_buffer.Length, Buffer.Length);
+                    Buffer = temp_buf;
+                    receive_buffer = null;
+                }
 
-              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FRAGMENTATION, String.Format("SBB_OnData Buffer.Length={0}", Buffer.Length));
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FRAGMENTATION, String.Format("SBB_OnData Buffer.Length={0}", Buffer.Length));
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_SOCKET, String.Format("TLS_{0}: Data received, len {1}", Sender is ReloadTLSServer ? "S" : "C", Buffer.Length));
-                IAssociation association = (IAssociation)Sender;
+                //IAssociation association = (IAssociation)Sender; -- moved to top
                 ReloadConnectionTableEntry connectionTableEntry = m_connection_table.updateEntry(Sender);
                 if (ReloadFLMEventHandler != null)
                 {
@@ -414,46 +752,49 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                         byte[] AnalysedBuffer = null;
                         long bytesProcessed = 0;
                         BinaryReader reader = new BinaryReader(new MemoryStream(Buffer));
-                        do { //TODO: optimize! Problem: streaming socket => no guarantee to receive only a single ReloadMessage in one SBB_OnData call also reception of partial messages possible (not handled so far)
-                          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FRAGMENTATION, String.Format("SBB_OnData Buffer.Length={0} bytesProcessed={1}", Buffer.Length, bytesProcessed));
+                        do
+                        { //TODO: optimize! Problem: streaming socket => no guarantee to receive only a single ReloadMessage in one SBB_OnData call also reception of partial messages possible (not handled so far)
+                            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FRAGMENTATION, String.Format("SBB_OnData Buffer.Length={0} bytesProcessed={1}", Buffer.Length, bytesProcessed));
                             Byte[] buf = new Byte[Buffer.Length - bytesProcessed];
                             reader.BaseStream.Seek(bytesProcessed, SeekOrigin.Begin);
                             reader.Read(buf, 0, (int)(Buffer.Length - bytesProcessed));
-                            uint bytecount=0;
-                            bool isAck=false;
+                            uint bytecount = 0;
+                            bool isAck = false;
                             AnalysedBuffer = analyseFrameHeader(connectionTableEntry, buf, ref bytecount, ref isAck);
-                            
+
                             bytesProcessed += bytecount;    //framing header
-                            if (isAck == true) {
+                            if (isAck == true)
+                            {
 
                             }
 
                             else if (AnalysedBuffer != null)
                             {
-                              m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FRAGMENTATION, String.Format("SBB_OnData buf.Length={0} AnalysedBuffer.Length={1} bytesProcessed={2}", buf.Length, AnalysedBuffer.Length, bytesProcessed));
+                                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FRAGMENTATION, String.Format("SBB_OnData buf.Length={0} AnalysedBuffer.Length={1} bytesProcessed={2}", buf.Length, AnalysedBuffer.Length, bytesProcessed));
                                 //bytesProcessed = 0;
                                 long temp = bytesProcessed;
                                 reloadMsg = new ReloadMessage(m_ReloadConfig).FromBytes(AnalysedBuffer, ref temp, ReloadMessage.ReadFlags.full);
-                                if (reloadMsg.reload_message_body == null) {  //not all bytes of an fragmented message are received yet
-                                  
-                                  receive_buffer = new byte[buf.Length];
-                                  m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("reloadMsg.reload_message_body = NULL receive_buffer.length=" + receive_buffer.Length));
-                                  Array.Copy(buf, 0, receive_buffer, 0, buf.Length);
-                                  return;
+                                if (reloadMsg.reload_message_body == null)
+                                {  //not all bytes of an fragmented message are received yet
+
+                                    receive_buffer = new byte[buf.Length];
+                                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("reloadMsg.reload_message_body = NULL receive_buffer.length=" + receive_buffer.Length));
+                                    Array.Copy(buf, 0, receive_buffer, 0, buf.Length);
+                                    return;
                                 }
-                                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, String.Format("MessageLength={0}", temp));
+                                //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, String.Format("MessageLength={0}", temp));
                                 bytesProcessed += temp;
                                 reloadMsg.LastHopNodeId = connectionTableEntry.NodeID;
 
                                 ReloadFLMEventHandler(this,
                                     new ReloadFLMEventArgs(ReloadFLMEventArgs.ReloadFLMEventTypes.RELOAD_EVENT_RECEIVE_OK, connectionTableEntry, reloadMsg));
                             }
-                                //// message was invalid but a least the size could be extracted, try to skip to next packet
-                                //else if (thisMsgBytes != 0)
-                                //{
-                                //  bytesProcessed += thisMsgBytes;
-                                //  association.InputBufferOffset -= (int)thisMsgBytes; /* Help rx to terminate */
-                                //}
+                            //// message was invalid but a least the size could be extracted, try to skip to next packet
+                            //else if (thisMsgBytes != 0)
+                            //{
+                            //  bytesProcessed += thisMsgBytes;
+                            //  association.InputBufferOffset -= (int)thisMsgBytes; /* Help rx to terminate */
+                            //}
 
                             else
                             {
@@ -467,9 +808,9 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                         } while (bytesProcessed < Buffer.Length);
                         if (Buffer.Length != bytesProcessed)
                             m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, String.Format("TLS_{0}: Buffer.Length({1}) != bytesProcessed({2}) inside thrown block!", Sender is ReloadTLSServer ? "S" : "C", Buffer.Length, bytesProcessed));
-                      }
-                      else
-                          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_{0}: connectionTableEntry == null! Data lost!", Sender is ReloadTLSServer ? "S" : "C"));
+                    }
+                    else
+                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_{0}: connectionTableEntry == null! Data lost!", Sender is ReloadTLSServer ? "S" : "C"));
                 }
                 else
                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_WARNING, String.Format("TLS_{0}: ReloadFLMEventHandler == null!", Sender is ReloadTLSServer ? "S" : "C"));
@@ -481,60 +822,20 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
         }
 
         /// <summary>
-        /// Called if SBB needs some byte to consume
+        /// Callback on request to send TLS data.
         /// </summary>
         /// <param name="Sender">The sender.</param>
         /// <param name="Buffer">The buffer.</param>
-        /// <param name="MaxSize">Size of the max.</param>
-        /// <param name="Written">The written.</param>
-        private void SBB_OnReceive(object Sender, ref byte[] InputBuffer, int MaxSize, out int Written)
+        private void Send(object Sender, byte[] Buffer)
         {
+
             IAssociation association = (IAssociation)Sender;
-            int len = Math.Min(MaxSize, association.InputBufferOffset);
-            Written = len;
-            association.InputBufferOffset -= len;
 
-            m_ReloadConfig.Statistics.BytesRx = (ulong)len;
-
-            if (len == 0)
-            {
-                association.InputBufferOffset = 0;
-                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "SBB_OnReceive: Clearing association InputBuffer on MaxSize=0");
-                return;
-            }
-            Buffer.BlockCopy(association.InputBuffer, 0, InputBuffer, 0, len);
-            if (association.InputBufferOffset > 0)
-                Buffer.BlockCopy(association.InputBuffer, len, association.InputBuffer, 0, association.InputBufferOffset);
-        }
-
-
-        /// <summary>
-        /// SBB callback on request to send TLS data.
-        /// </summary>
-        /// <param name="Sender">The sender.</param>
-        /// <param name="Buffer">The buffer.</param>
-        private void SBB_OnSend(object Sender, byte[] Buffer)
-        {
-            IAssociation association = (IAssociation)Sender;
-            try
-            {
-                Socket remoteSocket = association.AssociatedSocket;
-                remoteSocket.BeginSend(Buffer, 0, Buffer.Length, 0, new AsyncCallback(socketAsyncSendCallback), association);
-                m_ReloadConfig.Statistics.BytesTx = (ulong)Buffer.Length;
-            }
-            catch (Exception ex)
-            {
-                if (ex is SocketException)
-                {
-                    Socket remoteSocket = association.AssociatedSocket;
-                    HandleRemoteClosing(remoteSocket);
-                }
-                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "SBB_OnSend: " + ex.Message);
-            }
+            EnqueueDataForWrite(association, Buffer); //threadsafe
         }
 
         /// <summary>
-        /// SBB callback for certificate validation.
+        /// callback for certificate validation.
         /// </summary>
         /// <param name="Sender">The sender.</param>
         /// <param name="X509Certificate">The X509 certificate.</param>
@@ -543,18 +844,18 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
 		// Because of different callback signatures...
 		private void SBB_OnCertificateValidate(object Sender, TElX509Certificate X509Certificate, ref TSBBoolean Validate)
 #else
-        private void SBB_OnCertificateValidate(object Sender, TElX509Certificate X509Certificate, ref bool Validate)
+        private void CertificateValidate(object Sender, System.Security.Cryptography.X509Certificates.X509Certificate2 X509Certificate)
 #endif
         {
             string rfc822Name = null;
 
             NodeId nodeid = ReloadGlobals.retrieveNodeIDfromCertificate(X509Certificate, ref rfc822Name);
 
-            Validate = X509Certificate.ValidateWithCA(m_ReloadConfig.CACertificate);
+            bool Validate = Utils.X509Utils.VerifyCertificate(X509Certificate, m_ReloadConfig.RootCertificate);
 
-            if(!Validate)
+            if (!Validate)
             {
-                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_{0}: NodeID {1} Endpoint {2}, Certificate validation failed (CA Issuer {3})", Sender is ReloadTLSServer ? "S" : "C", nodeid, (Sender as IAssociation).AssociatedSocket.RemoteEndPoint.ToString(), X509Certificate.IssuerName.CommonName));
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_{0}: NodeID {1} Endpoint {2}, Certificate validation failed (CA Issuer {3})", Sender is ReloadTLSServer ? "S" : "C", nodeid, (Sender as IAssociation).AssociatedSocket.RemoteEndPoint.ToString(), X509Certificate.Subject));
                 return;
             }
 
@@ -580,35 +881,15 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
         }
 
         /// <summary>
-        /// SBB callback on error.
-        /// </summary>
-        /// <param name="Sender">The sender.</param>
-        /// <param name="ErrorCode">The error code.</param>
-        /// <param name="Fatal">if set to <c>true</c> [fatal].</param>
-        /// <param name="Remote">if set to <c>true</c> [remote].</param>
-        private void SBB_OnError(object Sender, int ErrorCode, bool Fatal, bool Remote)
-        {
-            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("TLS_{0}: Error {1}, {2}", Sender is ReloadTLSServer ? "S" : "C", ErrorCode, Remote?"remote":"local"));
-
-            IAssociation association = (IAssociation)Sender;
-            association.TLSClose(true);
-            HandleRemoteClosing(association.AssociatedSocket);
-
-            m_ReloadConfig.Statistics.IncConnectionError();
-        }
-        #endregion
-
-        /// <summary>
         /// Socket async send callback.
         /// </summary>
         /// <param name="ar">The ar.</param>
         private void socketAsyncSendCallback(IAsyncResult ar)
         {
             IAssociation association = (IAssociation)ar.AsyncState;
-            Socket remoteSocket = association.AssociatedSocket;
             try
             {
-                remoteSocket.EndSend(ar);
+                association.AssociatedSslStream.EndWrite(ar);
             }
             catch (Exception ex)
             {
@@ -616,6 +897,30 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TRANSPORT, "AsyncSend SocketError:" + ((SocketException)ex).ErrorCode.ToString());
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "AsyncSend: " + ex.Message);
             }
+
+            Write(association);
+        }
+
+        /// <summary>
+        /// Socket async send callback RFC 4571 Header.
+        /// </summary>
+        /// <param name="ar">The ar.</param>
+        private void socketAsyncSendCallbackRfc4571Header(IAsyncResult ar)
+        {
+            IAssociation association = (IAssociation)ar.AsyncState;
+            try
+            {
+                //association.AssociatedSslStream.EndWrite(ar);
+                association.AssociatedClient.GetStream().EndWrite(ar);
+            }
+            catch (Exception ex)
+            {
+                if (ex is SocketException)
+                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_TRANSPORT, "AsyncSend SocketError:" + ((SocketException)ex).ErrorCode.ToString());
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "AsyncSend: " + ex.Message);
+            }
+
+            //Write(association);
         }
 
         #region Public functions
@@ -644,9 +949,17 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
         /// Send data.
         /// </summary>
         /// <param name="send_params">The send_params.</param>
-        internal IEnumerator<ITask> Send(Node node, ReloadSendParameters send_params) 
+        internal IEnumerator<ITask> Send(Node node, ReloadSendParameters send_params)
         {
-            yield return Arbiter.ExecuteToCompletion(m_DispatcherQueue, new IterativeTask<Node, ReloadSendParameters>(node, send_params, linkSend));
+            //yield return Arbiter.ExecuteToCompletion(m_DispatcherQueue, new IterativeTask<Node, ReloadSendParameters>(node, send_params, linkSend)); //original
+
+            //markus
+            if (send_params.connectionSocket == null)
+                yield return Arbiter.ExecuteToCompletion(m_DispatcherQueue, new IterativeTask<Node, ReloadSendParameters>(node, send_params, linkSend));
+
+            else
+                yield return Arbiter.ExecuteToCompletion(m_DispatcherQueue, new IterativeTask<Node, ReloadSendParameters>(node, send_params, ICElinkSend));
+
         }
         #endregion
 
@@ -657,12 +970,14 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 if (m_connection_table != null)
                     foreach (KeyValuePair<string, ReloadConnectionTableEntry> pair in m_connection_table)
                     {
-                        Socket AssociatedSocket = ((IAssociation)pair.Value.secureObject).AssociatedSocket;
-                        if (AssociatedSocket != null)
+                        IAssociation association = (IAssociation)pair.Value.secureObject;
+                        if (association.AssociatedSocket != null)
                         {
-                            if (AssociatedSocket.Connected)
-                                AssociatedSocket.Shutdown(SocketShutdown.Both);
-                            AssociatedSocket.Close();
+                            if (association.AssociatedSocket.Connected)
+                            {
+                                association.AssociatedSslStream.Close();
+                                association.AssociatedClient.Close();
+                            }
                         }
                     }
 
@@ -786,7 +1101,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
 
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FH, String.Format("Tx FH DATA {0}", connectionTableEntry.fh_sequence));
 
-                connectionTableEntry.fh_sent.Add(connectionTableEntry.fh_sequence++, DateTime.Now);
+                connectionTableEntry.fh_sent[connectionTableEntry.fh_sequence++] =  DateTime.Now;
                 return ToBytes(fh_message_data, message);
             }
             else
@@ -809,7 +1124,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 FramedMessageType type = (FramedMessageType)fh_message[0];
                 if (type == FramedMessageType.ack)
                 {
-                  ack = true;
+                    ack = true;
                     FramedMessageAck fh_ack = FMA_FromBytes(fh_message);
                     read_bytes = 9;
 
@@ -842,7 +1157,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 {
                     if (type == FramedMessageType.data)
                     {
-                      ack = false;
+                        ack = false;
                         FramedMessageData fh_data = FMD_FromBytes(fh_message);
                         read_bytes = 8; //TODO: why 8???
                         byte[] fh_stripped_data = new byte[fh_message.Length - 8];
@@ -887,14 +1202,14 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                         return fh_stripped_data;
                     }
                     else
-                      {
-                          // unknown type try next byte
-                          read_bytes = 1;
-                          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,"UNKNOWN TYPE="+type);
-                      }
-                    
-                  }
-                
+                    {
+                        // unknown type try next byte
+                        read_bytes = 1;
+                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "UNKNOWN TYPE=" + type);
+                    }
+
+                }
+
                 return null;
             }
             else
@@ -905,5 +1220,126 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
 
             }
         }
+
+        /// <summary>
+        /// Enqueue the Data to Write in the ConcurrentQueue
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="buffer"></param>
+        void EnqueueDataForWrite(IAssociation sender, byte[] buffer)
+        {
+            if (buffer == null)
+                return;
+
+            sender.WritePendingData.Enqueue(buffer);
+
+            lock (sender.WritePendingData)
+            {
+                if (sender.SendingData)
+                    return;
+                else
+                    sender.SendingData = true;
+
+                Write(sender);
+            }
+        }
+
+        /// <summary>
+        /// Write Data in Queue to SslStream
+        /// </summary>
+        /// <param name="sender"></param>
+        void Write(IAssociation sender)
+        {
+
+            byte[] buffer = null;
+            NetworkStream ns = null;
+
+            // try to get NetworkStream for framing method (RFC 4571)
+            if (sender.AssociatedClient.Connected)
+            {
+                try
+                {
+                    ns = sender.AssociatedClient.GetStream();
+                }
+                catch (Exception ex)
+                {
+                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "Get NetworkStream: " + ex.Message);
+                }
+            }
+
+
+            try
+            {
+                if (sender.WritePendingData.Count > 0 && sender.WritePendingData.TryDequeue(out buffer))
+                {
+
+                    // Reload Msg Data + Reload Framing Header
+                    if ((buffer[0] == (byte)128) && ReloadMessage.RELOTAG == NetworkByteArray.ReadUInt32(buffer, 8))
+                    {
+                        // RFC 4571 Framing method
+                        ns.BeginWrite(NetworkByteArray.CreateUInt16((UInt16)buffer.Length), 0, sizeof(UInt16), new AsyncCallback(socketAsyncSendCallbackRfc4571Header), sender);
+
+                        sender.AssociatedSslStream.BeginWrite(buffer, 0, buffer.Length, new AsyncCallback(socketAsyncSendCallback), sender);
+                        m_ReloadConfig.Statistics.BytesTx = (ulong)buffer.Length + 2;
+                    }
+
+                    // Reload Msg Ack + Reload Framing Header
+                    else if (buffer[0] == (byte)129)
+                    {
+                        // RFC 4571 Framing method
+                        ns.BeginWrite(NetworkByteArray.CreateUInt16((UInt16)buffer.Length), 0, sizeof(UInt16), new AsyncCallback(socketAsyncSendCallbackRfc4571Header), sender);
+
+                        sender.AssociatedSslStream.BeginWrite(buffer, 0, buffer.Length, new AsyncCallback(socketAsyncSendCallback), sender);
+                        m_ReloadConfig.Statistics.BytesTx = (ulong)buffer.Length + 2;
+                    }
+
+
+                    // Reload Msg without Framing Header
+                    else if (ReloadMessage.RELOTAG == NetworkByteArray.ReadUInt32(buffer, 7))
+                    {
+                        // RFC 4571 Framing method
+                        ns.BeginWrite(NetworkByteArray.CreateUInt16((UInt16)buffer.Length), 0, sizeof(UInt16), new AsyncCallback(socketAsyncSendCallbackRfc4571Header), sender);
+
+                        sender.AssociatedSslStream.BeginWrite(buffer, 0, buffer.Length, new AsyncCallback(socketAsyncSendCallback), sender);
+                        m_ReloadConfig.Statistics.BytesTx = (ulong)buffer.Length + 2;
+                    }
+
+                    // STUN Msg
+                    else if (STUN.STUNMessage.m_MagicCookie == NetworkByteArray.ReadUInt32(buffer, 4))
+                    {
+                        // RFC 4571 Framing method (keine App Daten, daher Länge = 0)
+                        ns.BeginWrite(NetworkByteArray.CreateUInt16(0), 0, sizeof(UInt16), new AsyncCallback(socketAsyncSendCallbackRfc4571Header), sender);
+
+                        // TODO: STUN Msg in NetworkStream schreiben
+
+                        m_ReloadConfig.Statistics.BytesTx = (ulong)buffer.Length + 2;
+                    }
+
+
+
+                }
+                else
+                {
+                    lock (sender.WritePendingData)
+                    {
+                        sender.SendingData = false;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                if (ex is SocketException)
+                {
+                    HandleRemoteClosing(sender.AssociatedSslStream, sender.AssociatedClient);
+                }
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "Send: " + ex.Message);
+
+                lock (sender.WritePendingData)
+                {
+                    sender.SendingData = false;
+                }
+            }
+        }
+
     }
 }
