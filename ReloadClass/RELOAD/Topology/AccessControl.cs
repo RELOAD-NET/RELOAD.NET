@@ -28,8 +28,7 @@ using System.Text;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.IO;
-using SBX509;
-using SBPublicKeyCrypto;
+
 using TSystems.RELOAD.Transport;
 using TSystems.RELOAD.Utils;
 using TSystems.RELOAD.Storage;
@@ -158,91 +157,103 @@ namespace TSystems.RELOAD.Topology {
     }
 
     public AccessController(ReloadConfig rc) {
-        var ascii = new ASCIIEncoding();
-        m_ReloadConfig = rc;
-        storedPKCs = new Dictionary<string, GenericCertificate>();
-        ACPs = new Dictionary<String, IAccessControlPolicy>();
-        ACPmap = new Dictionary<UInt32, String>();
-        /* Convert My TEIX509Certificate to opaque string*/
-        /* SignerIdValue*/
-        var sha256 = new SHA256Managed();
-        byte[] myCert;
-        m_ReloadConfig.MyCertificate.SaveToBuffer(out myCert);
-        byte[] bHash = sha256.ComputeHash(myCert);
-        var signIdVal = new SignerIdentityValue(SignerIdentityType.cert_hash,
-          ReloadGlobals.HashAlg, bHash);
-        
-        /* Publish my Id and my PKC */
-        var myGenCert = new GenericCertificate(myCert);
-        myIdentity = new SignerIdentity(SignerIdentityType.cert_hash, signIdVal);
-        string strHash = String.Join(String.Empty, bHash.Select(b => b.ToString("x2")));
-        storedPKCs.Add(strHash, myGenCert);
+      var ascii = new ASCIIEncoding();
+      m_ReloadConfig = rc;
+      storedPKCs = new Dictionary<string, GenericCertificate>();
+      ACPs = new Dictionary<String, IAccessControlPolicy>();
+      ACPmap = new Dictionary<UInt32, String>();
+      /* Convert My TEIX509Certificate to opaque string*/
+      /* SignerIdValue*/
+      var sha256 = new SHA256Managed();
+      byte[] myCert;
+      //m_ReloadConfig.MyCertificate.SaveToBuffer(out myCert);
+      //myCert = m_ReloadConfig.MySSLCertificate.DER;
+      myCert = m_ReloadConfig.MyCertificate.GetRawCertData();
+      byte[] bHash = sha256.ComputeHash(myCert);
+      var signIdVal = new SignerIdentityValue(SignerIdentityType.cert_hash,
+        ReloadGlobals.HashAlg, bHash);
+
+      /* Publish my Id and my PKC */
+      var myGenCert = new GenericCertificate(myCert);
+      myIdentity = new SignerIdentity(SignerIdentityType.cert_hash, signIdVal);
+      string strHash = String.Join(String.Empty, bHash.Select(b => b.ToString("x2")));
+      storedPKCs.Add(strHash, myGenCert);
     }
 
-    private bool validateCertHash(ReloadMessage msg,
-      TElX509Certificate signerCert) {
-      var ascii = Encoding.ASCII;
-      UInt32 overlay = msg.forwarding_header.overlay;
-      UInt64 transId = msg.forwarding_header.transaction_id;
-      /* Convert msg body to string */
-      var ms = new MemoryStream();
-      var br = new BinaryWriter(ms);
-      msg.reload_message_body.Dump(br);
-      ms.Position = 0;
-      var sr = new StreamReader(ms);
-      string msgBoby = sr.ReadToEnd();
-      sr.Close();
-      br.Close();
-      /* Covert Idenity to string */
-      String identity = msg.security_block.Signature.Identity.ToString();
-      /* Concatenate signature params*/
-      String strSignaturInput = String.Format("{0}{1}{2}{3}",
-        overlay, transId, msgBoby, identity);
+    private bool validateCertHash(ReloadMessage msg, X509Certificate2 signerCert)
+    {
+        //var ascii = Encoding.ASCII;
+        UInt32 overlay = msg.forwarding_header.overlay;
+        UInt64 transId = msg.forwarding_header.transaction_id;
 
-      byte[] signatureInput = ascii.GetBytes(strSignaturInput);
+        /* Convert msg body to string */
+        var ms = new MemoryStream();
+        var br = new BinaryWriter(ms);
+        msg.reload_message_body.Dump(br);
+        ms.Position = 0;
 
-      byte[] sigVal = msg.security_block.Signature.SignaureValue;
-      signerCert.Validate();
-      var cryptoProvider = new TElRSAPublicKeyCrypto();
-      cryptoProvider.InputEncoding = TSBPublicKeyCryptoEncoding.pkeBinary;
-      cryptoProvider.OutputEncoding = TSBPublicKeyCryptoEncoding.pkeBinary;
-      cryptoProvider.KeyMaterial = signerCert.KeyMaterial;
-      cryptoProvider.UseAlgorithmPrefix = false;
-      switch (msg.security_block.Signature.Algorithm.signature) {
-        case SignatureAlgorithm.rsa:
-          cryptoProvider.CryptoType = TSBRSAPublicKeyCryptoType.rsapktPKCS1;
-          break;
-        case SignatureAlgorithm.dsa:
-          throw new NotImplementedException("AccessController:" +
-            "DSA encryption not implemented!");
-        default:
-          throw new NotImplementedException("AccessController:" +
-            "encryption not implemented!");
-      }
+        //var sr = new StreamReader(ms);
+        //string msgBoby = sr.ReadToEnd();
 
-      switch (msg.security_block.Signature.Algorithm.hash) {
-        case HashAlgorithm.sha256:
-          cryptoProvider.HashAlgorithm = SBConstants.Unit.SB_ALGORITHM_DGST_SHA256;
-          break;
-        default:
-          throw new NotImplementedException("AccessController:" +
-            "hash algoritm not implemented!");
-      }
-      var msInput = new MemoryStream(signatureInput);
-      var msSignature = new MemoryStream(
-        msg.security_block.Signature.SignaureValue);
-      try {
-        var res = cryptoProvider.VerifyDetached(msInput, msSignature, 0, 0);
-        if (res == TSBPublicKeyVerificationResult.pkvrSuccess)
-          return true;
-        else
-          return false;
-      }
-      catch (Exception e) {
-        var err = e.Message;
-        return false;
-      }
+        byte[] msgBody = ms.ToArray();
+
+        br.Close();
+
+        /* Covert Idenity to string */
+        String identity = msg.security_block.Signature.Identity.ToString();
+
+        /* Concatenate signature params*/
+        //String strSignaturInput = String.Format("{0}{1}{2}{3}", overlay, transId, msgBody, identity);
+
+        //byte[] signatureInput = ascii.GetBytes(strSignaturInput);
+
+        byte[] bOverlay = BitConverter.GetBytes(overlay);
+        byte[] bTransId = Encoding.Unicode.GetBytes(transId.ToString());
+        byte[] bId = Encoding.Unicode.GetBytes(identity);
+
+        byte[] signatureInput = new byte[bOverlay.Length + bTransId.Length + msgBody.Length + bId.Length];
+        System.Buffer.BlockCopy(bOverlay, 0, signatureInput, 0, bOverlay.Length);
+        System.Buffer.BlockCopy(bTransId, 0, signatureInput, bOverlay.Length, bTransId.Length);
+        System.Buffer.BlockCopy(msgBody, 0, signatureInput, bOverlay.Length + bTransId.Length, msgBody.Length);
+        System.Buffer.BlockCopy(bId, 0, signatureInput, bOverlay.Length + bTransId.Length + msgBody.Length, bId.Length);
+
+        byte[] sigVal = msg.security_block.Signature.SignaureValue;
+
+        if (msg.security_block.Signature.Algorithm.signature != SignatureAlgorithm.rsa)
+            throw new NotImplementedException("AccessController:" +
+                  "encryption not implemented!");
+
+        if (msg.security_block.Signature.Algorithm.hash != HashAlgorithm.sha256)
+            throw new NotImplementedException("AccessController:" +
+                  "hash algoritm not implemented!");
+
+        try
+        {
+            RSACryptoServiceProvider rsaCSP = (RSACryptoServiceProvider)signerCert.PublicKey.Key;
+
+            if (rsaCSP.VerifyData(signatureInput, CryptoConfig.MapNameToOID("SHA256"), msg.security_block.Signature.SignaureValue))
+                return true;
+            else
+            {
+                if (msg.reload_message_body.RELOAD_MsgCode == RELOAD_MessageCode.Attach_Answer)
+                {
+                    // Use this log message to compare with the log message in Topology.Signature.Signature()
+                    string msgBodyLog = "";
+                    foreach (byte b in msgBody)
+                        msgBodyLog += Convert.ToString(b, 16);
+                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("validateCertHash(): TransId: {0:x} messageContent: {1}", transId, msgBodyLog));
+                }
+                return false;
+            }
+        }
+        catch (Exception e)
+        {
+            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("VerifyHash: {0}", e.Message));
+            return false;
+        }
     }
+
+
 
     #region Public methods
 
@@ -263,7 +274,18 @@ namespace TSystems.RELOAD.Topology {
     }
 
     public void SetPKCs(List<GenericCertificate> pkcs) {
-      throw new NotImplementedException();
+        var certs = new Dictionary<string, GenericCertificate>();
+        var sha256 = new SHA256Managed();
+        
+        foreach (GenericCertificate cert in pkcs)
+        {
+            byte[] bHash = sha256.ComputeHash(cert.Certificate);
+            string strHash = String.Join(String.Empty, bHash.Select(b => b.ToString("x2")));
+            if(!storedPKCs.ContainsKey(strHash))
+                certs.Add(strHash, cert);
+        }
+
+        SetPKCs(certs);
     }
 
     public void SetPKCs(Dictionary<String, GenericCertificate> pkcs) {
@@ -327,8 +349,6 @@ namespace TSystems.RELOAD.Topology {
       /* Obtain security parameter */
       SecurityBlock security_block = msg.security_block;
       var signId = security_block.Signature.Identity;
-      /* Certificate from originator */
-      var cert = new TElX509Certificate();
       /* Dictionary over all certs carried in msg */
       var certs = new Dictionary<string, GenericCertificate>();
       var sha256 = new SHA256Managed();
@@ -337,25 +357,36 @@ namespace TSystems.RELOAD.Topology {
       foreach (GenericCertificate pkc in security_block.Certificates) {
         byte[] bHash = sha256.ComputeHash(pkc.Certificate);
         string strHash = String.Join(String.Empty, bHash.Select(b => b.ToString("x2")));
-        certs.Add(strHash, pkc );
+        if(!certs.ContainsKey(strHash))
+            certs.Add(strHash, pkc);
 
       }
       SetPKCs(certs);
       string strHash2 = String.Join(String.Empty, signId.Identity.CertificateHash.Select(b => b.ToString("x2")));
 
       byte[] bcert = certs[strHash2].Certificate;
-      cert.LoadFromBuffer(bcert);
-      if (!cert.ValidateWithCA(m_ReloadConfig.CACertificate)) {
-        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
-          String.Format("FromBytes: NodeID {0}, Certificate" +
-          "validation failed (CA Issuer {1})",
-          security_block.OriginatorNodeID, cert.IssuerName.CommonName));
+      //cert.LoadFromBuffer(bcert);
+
+      // Validate Certificate with CA
+      /* Certificate from originator */
+      X509Certificate2 cert = new X509Certificate2(bcert);
+      if (!Utils.X509Utils.VerifyCertificate(cert,m_ReloadConfig.RootCertificate))
+      {
+        //m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
+        //  String.Format("FromBytes: NodeID {0}, Certificate" +
+        //  "validation failed (CA Issuer {1})",
+        //  security_block.OriginatorNodeID, cert.IssuerName.CommonName));
+            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
+              String.Format("FromBytes: NodeID {0}, Certificate" +
+              "validation failed (CA Issuer {1})",
+              security_block.OriginatorNodeID, cert.Issuer));
         return false;
       }
+
       /* Validate Signature */
       switch (signId.IdentityType) {
         case SignerIdentityType.cert_hash:
-          return validateCertHash(msg, cert);
+            return validateCertHash(msg, cert);
         case SignerIdentityType.cert_hash_node_id:
           // TODO
           throw new NotImplementedException(
@@ -375,87 +406,73 @@ namespace TSystems.RELOAD.Topology {
     public bool validateDataSignature(ResourceId resId, uint kind, StoredData sd) {
       //FetchAns fetch_answer = (FetchAns)(reloadMsg.reload_message_body);
 
-        var ascii = new ASCIIEncoding();
-        /* Set alogorithm and identity */
-        SignatureAndHashAlgorithm algorithm = new SignatureAndHashAlgorithm(HashAlgorithm.sha256,
-          ReloadGlobals.SignatureAlg);
-        /* Covert Idenity to string */
-        String identity = sd.Signature.Identity.ToString();
-        /* Get string of stored data value */
-        var ms = new MemoryStream();
-        var bw = new BinaryWriter(ms);
-        sd.Value.Dump(bw);
-        sd.Value.GetUsageValue.dump(bw);
-        ms.Position = 0;
-        var sr = new StreamReader(ms);
-        string strValue = sr.ReadToEnd();
-        sr.Close();
-        bw.Close();
-        /* Concatenate signature input */
-        String strSignaturInput = String.Format("{0}{1}{2}{3}{4}",
-          ascii.GetString(resId.Data, 0, resId.Data.Length), kind, sd.StoreageTime,
-          strValue, identity);
+      var ascii = new ASCIIEncoding();
+      /* Set alogorithm and identity */
+      SignatureAndHashAlgorithm algorithm = new SignatureAndHashAlgorithm(HashAlgorithm.sha256, ReloadGlobals.SignatureAlg);
+      /* Covert Idenity to string */
+      String identity = sd.Signature.Identity.ToString();
+      /* Get string of stored data value */
+      var ms = new MemoryStream();
+      var bw = new BinaryWriter(ms);
+      sd.Value.Dump(bw);
+      sd.Value.GetUsageValue.dump(bw);
+      ms.Position = 0;
+      var sr = new StreamReader(ms);
+      string strValue = sr.ReadToEnd();
+      sr.Close();
+      bw.Close();
+      /* Concatenate signature input */
+      String strSignaturInput = String.Format("{0}{1}{2}{3}{4}",
+        ascii.GetString(resId.Data, 0, resId.Data.Length), kind, sd.StoreageTime,
+        strValue, identity);
 
-        byte[] signatureInput = ascii.GetBytes(strSignaturInput);
-        byte[] sigVal = sd.Signature.SignaureValue;
+      byte[] signatureInput = ascii.GetBytes(strSignaturInput);
+      byte[] sigVal = sd.Signature.SignaureValue;
 
-        var signerCert = new TElX509Certificate();
-        GenericCertificate gencert = GetPKC(sd.Signature.Identity);
-        byte[] bcert = gencert.Certificate; //TODO: TEST
+      GenericCertificate gencert = GetPKC(sd.Signature.Identity);
+      byte[] bcert = gencert.Certificate; //TODO: TEST
+      X509Certificate2 signerCert = new X509Certificate2(bcert);
 
-        int ret;
-        if ((ret = signerCert.LoadFromBufferAuto(bcert, 0, bcert.Length, "")) != 0)
-            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
-                String.Format("LoadFromBufferAuto was unable to load certificate from memory buffer\nError Code: {0}", ret));
+      if (!Utils.X509Utils.VerifyCertificate(signerCert, m_ReloadConfig.RootCertificate))
+      {
+        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
+          String.Format("validateDataSignatures: NodeID {0}, Certificate" +
+          "validation failed (CA Issuer {1})",
+          null, signerCert.Issuer));
+        //return false;
+      }
+      var cert = new X509Certificate2(bcert);
 
-        if (!signerCert.ValidateWithCA(m_ReloadConfig.CACertificate)) {
-          m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
-            String.Format("validateDataSignatures: NodeID {0}, Certificate" +
-            "validation failed (CA Issuer {1})",
-            null, signerCert.IssuerName.CommonName));
-          //return false;
-        }
+      switch (sd.Signature.Algorithm.signature) {
+        case SignatureAlgorithm.rsa:
+          var cryptoIPT = (RSACryptoServiceProvider)cert.PublicKey.Key;
 
-        var cryptoProvider = new TElRSAPublicKeyCrypto();
-        cryptoProvider.InputEncoding = TSBPublicKeyCryptoEncoding.pkeBinary;
-        cryptoProvider.OutputEncoding = TSBPublicKeyCryptoEncoding.pkeBinary;
-        cryptoProvider.KeyMaterial = signerCert.KeyMaterial;
-        cryptoProvider.UseAlgorithmPrefix = false;
-        switch (sd.Signature.Algorithm.signature) {
-          case SignatureAlgorithm.rsa:
-            cryptoProvider.CryptoType = TSBRSAPublicKeyCryptoType.rsapktPKCS1;
-            break;
-          case SignatureAlgorithm.dsa:
-            throw new NotImplementedException("AccessController:" +
-              "DSA encryption not implemented!");
-          default:
-            throw new NotImplementedException("AccessController:" +
-              "encryption not implemented!");
-        }
+          switch (sd.Signature.Algorithm.hash) {
+            case HashAlgorithm.sha256:
+              var sha256 = new SHA256CryptoServiceProvider();
 
-        switch (sd.Signature.Algorithm.hash) {
-          case HashAlgorithm.sha256:
-            cryptoProvider.HashAlgorithm = SBConstants.Unit.SB_ALGORITHM_DGST_SHA256;
-            break;
-          default:
-            throw new NotImplementedException("AccessController:" +
-              "hash algoritm not implemented!");
-        }
-        var msInput = new MemoryStream(signatureInput);
-        var msSignature = new MemoryStream(sigVal);
-        try {
-          var res = cryptoProvider.VerifyDetached(msInput, msSignature, 0, 0);
-          if (res == TSBPublicKeyVerificationResult.pkvrSuccess) {
-            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, "DATA SIGNATURE VALID!!");
-            return true;
+              if (!cryptoIPT.VerifyData(signatureInput, sha256, sigVal)) {
+                throw new InvalidOperationException("Invalid signature");
+                return false;
+              }
+              else {
+                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_FORWARDING, "DATA SIGNATURE VALID!!");
+                return true;
+              }
+              break;
+            default:
+              throw new NotImplementedException("AccessController:" +
+                "hash algoritm not implemented!");
           }
-          else
-            return false;
-        }
-        catch (Exception e) {
-          var err = e.Message;
-          return false;
-        }
+
+          break;
+        case SignatureAlgorithm.dsa:
+          throw new NotImplementedException("AccessController:" +
+            "DSA encryption not implemented!");
+        default:
+          throw new NotImplementedException("AccessController:" +
+            "encryption not implemented!");
+      }
     }
     #endregion
   }

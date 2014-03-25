@@ -28,13 +28,12 @@ using System.IO;
 using System.Text.RegularExpressions;
 using System.Security.Cryptography;
 using System.Net;
-using SBMessages;
-using SBCustomCertStorage;
-using SBPublicKeyCrypto;
 using System.Reflection;
-using SBX509;
 using TSystems.RELOAD.Utils;
 using TSystems.RELOAD.Storage;
+
+using System.Security.Cryptography.X509Certificates;
+using TSystems.RELOAD.Transport;
 
 namespace TSystems.RELOAD.Topology {
 
@@ -168,9 +167,7 @@ namespace TSystems.RELOAD.Topology {
     /// <param name="transaction_id">transaction_id</param>
     /// <param name="messageContents">Message Contents</param>
     /// <param name="signerIdentity">SignerIdentity</param>
-    public Signature(UInt32 overlay, string transactionId,
-      string messageContents, SignerIdentity signerIdentity,
-      ReloadConfig config) {
+    public Signature(UInt32 overlay, string transactionId, string messageContents, SignerIdentity signerIdentity, ReloadConfig config) {
 
       m_ReloadConfig = config;
 
@@ -178,9 +175,31 @@ namespace TSystems.RELOAD.Topology {
         ReloadGlobals.SignatureAlg);
       identity = signerIdentity;
       /* Compute signature */      
-      String signaturInput = String.Format("{0}{1}{2}{3}",
-        overlay, transactionId, messageContents, identity.ToString());
+      String signaturInput = String.Format("{0}{1}{2}{3}", overlay, transactionId, messageContents, identity.ToString());
+
       signatureValue = Sign(signaturInput);      
+    }
+
+    public Signature(UInt32 overlay, string transactionId, byte[] messageContents, SignerIdentity signerIdentity, ReloadConfig config)
+    {
+        m_ReloadConfig = config;
+
+        algorithm = new SignatureAndHashAlgorithm(HashAlgorithm.sha256,
+          ReloadGlobals.SignatureAlg);
+        identity = signerIdentity;
+        /* Compute signature */
+
+        byte[] bOverlay = BitConverter.GetBytes(overlay);
+        byte[] bTransId = Encoding.Unicode.GetBytes(transactionId);
+        byte[] bId = Encoding.Unicode.GetBytes(identity.ToString());
+
+        byte[] sig = new byte[bOverlay.Length + bTransId.Length + messageContents.Length + bId.Length];
+        System.Buffer.BlockCopy(bOverlay, 0, sig, 0, bOverlay.Length);
+        System.Buffer.BlockCopy(bTransId, 0, sig, bOverlay.Length, bTransId.Length);
+        System.Buffer.BlockCopy(messageContents, 0, sig, bOverlay.Length + bTransId.Length, messageContents.Length);
+        System.Buffer.BlockCopy(bId, 0, sig, bOverlay.Length + bTransId.Length + messageContents.Length, bId.Length);
+
+        signatureValue = Sign(sig);
     }
 
     /// <summary>
@@ -260,41 +279,41 @@ namespace TSystems.RELOAD.Topology {
     /// </summary>
     /// <param name="signaturInput">Data to be signed.</param>
     /// <returns>the signature value</returns>
+    private byte[] Sign(byte[] bSignInput)
+    {
+        X509Certificate2 MyCert = m_ReloadConfig.MyCertificate;
+
+        if (!MyCert.HasPrivateKey)
+            return null;
+
+        RSACryptoServiceProvider key = (RSACryptoServiceProvider)MyCert.PrivateKey;
+
+        byte[] signature = key.SignData(bSignInput, CryptoConfig.MapNameToOID("SHA256"));
+        return signature;
+    }
+
+
+    /// <summary>
+    /// Creates the signature using RSA over a SHA256. Uses the private 
+    /// key from file.
+    /// </summary>
+    /// <param name="signaturInput">Data to be signed.</param>
+    /// <returns>the signature value</returns>
     private byte[] Sign(string signaturInput) {
+
         var ascii = new ASCIIEncoding();
         byte[] bSignInput = ascii.GetBytes(signaturInput);
-        //var sha256 = new SHA256CryptoServiceProvider();
-        //var hash = sha256.ComputeHash(bSignInput);      
-        TElX509Certificate sbbMyCert = m_ReloadConfig.MyCertificate;        
-        /* Damn .Net can't RSA-SHA256 :-[    
-        var privKey = sbbMyCert.ToX509Certificate2(true).PrivateKey;
-        var RSAprovider = (RSACryptoServiceProvider)privKey;       
-        var RSAformatter = new RSAPKCS1SignatureFormatter(RSAprovider);      
-        switch (ReloadGlobals.HashAlg) {
-          case HashAlgorithm.sha256:
-            RSAformatter.SetHashAlgorithm("SHA256");          
-            break;
-          default:
-            throw new NotSupportedException("Signature: Just SHA256 supported!");
-        }
-        byte[] signedHash = RSAformatter.CreateSignature(hash);      
-        string strSign = ascii.GetString(signedHash);*/
 
-        var cryptoProver = new TElRSAPublicKeyCrypto();
-        cryptoProver.InputEncoding = TSBPublicKeyCryptoEncoding.pkeBinary;
-        cryptoProver.OutputEncoding = TSBPublicKeyCryptoEncoding.pkeBinary;
-        cryptoProver.HashAlgorithm = SBConstants.Unit.SB_ALGORITHM_DGST_SHA256;
-        cryptoProver.KeyMaterial = sbbMyCert.KeyMaterial;
-        cryptoProver.CryptoType = TSBRSAPublicKeyCryptoType.rsapktPKCS1;
-        cryptoProver.UseAlgorithmPrefix = false;
+        X509Certificate2 MyCert = m_ReloadConfig.MyCertificate;
 
-        var ms = new MemoryStream();
-        cryptoProver.SignDetached(new MemoryStream(bSignInput), ms, 0);
-        ms.Seek(0, SeekOrigin.Begin);
-        byte[] signatureVal = new BinaryReader(ms).ReadBytes(ms.Capacity);
-        var sig = signatureVal;
-        return sig;
-    }
+        if (!MyCert.HasPrivateKey)
+            return null;
+
+        RSACryptoServiceProvider key = (RSACryptoServiceProvider)MyCert.PrivateKey;
+
+        byte[] signature = key.SignData(bSignInput, CryptoConfig.MapNameToOID("SHA256"));
+        return signature;
+}
 
     #endregion
 

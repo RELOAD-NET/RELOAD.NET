@@ -28,6 +28,7 @@ using System.Net;
 using System.ComponentModel;
 using System.Configuration;
 using System.Net.Sockets;
+using System.Linq;
 using TSystems.RELOAD.ForwardAndLinkManagement;
 using Microsoft.Ccr.Core;
 using TSystems.RELOAD;
@@ -48,6 +49,16 @@ namespace TSystems.RELOAD.Topology {
         private Dictionary<string, SipRegistration> StoredValues {
             get { return m_StoredValues; }
             set { m_StoredValues = value; }
+        }
+
+        // REPLICATEST
+        // Replica List, contains keys of replicas
+        private List<string> m_replicas = new List<string>();
+
+        public List<string> Replicas
+        {
+            get { return m_replicas; }
+            set { m_replicas = value; }
         }
 
         private StorageModul storage;
@@ -98,8 +109,19 @@ namespace TSystems.RELOAD.Topology {
             Dictionary<string, RTableEntry> m_RtTable = new Dictionary<string, RTableEntry>();
             Dictionary<string, NodeId> m_LearnedFromTable = new Dictionary<string, NodeId>();
             Dictionary<string, UpdateReqAns> m_NeighborInfoTable = new Dictionary<string, UpdateReqAns>();
+
+            // A list of all Nodes that send us a Leave Request
+            // We need to make sure we do not learn about these Nodes again
+            private Dictionary<NodeId, DateTime> m_LeavingNodes = new Dictionary<NodeId, DateTime>();
+            
             List<NodeId> m_UpdateReceivedFromUnattachedNode = new List<NodeId>();
             List<FTableEntry> m_FingerTable = new List<FTableEntry>();
+
+            public Dictionary<NodeId, DateTime> LeavingNodes
+            {
+                get { return m_LeavingNodes; }
+                //set { m_LeavingNodes = value; }
+            }
 
             public Dictionary<string, RTableEntry> RtTable {
                 get { return m_RtTable; }
@@ -730,17 +752,51 @@ namespace TSystems.RELOAD.Topology {
 
                         List<NodeId> total_update_list = new List<NodeId>();
 
-                        total_update_list.Add(originator);
-                        total_update_list.AddRange(req_answ.Successors);
-                        total_update_list.AddRange(req_answ.Predecessors);
+                        var validSuccessors = new List<NodeId>();
+                        var validPredecessors = new List<NodeId>();
+
+                        if (LeavingNodes.Count > 0)
+                        {
+                            if (!LeavingNodes.ContainsKey(originator))
+                                total_update_list.Add(originator);
+
+                            List<NodeId> keys = LeavingNodes.Keys.ToList();
+
+                            foreach (NodeId node in req_answ.Successors)
+                            {
+                                if (!keys.Contains(node))
+                                    validSuccessors.Add(node);
+                            }
+
+                            total_update_list.AddRange(validSuccessors);
+
+                            foreach (NodeId node in req_answ.Predecessors)
+                            {
+                                if (!keys.Contains(node))
+                                    validPredecessors.Add(node);
+                            }
+
+                            total_update_list.AddRange(validPredecessors);
+                        }
+                        else
+                        {
+                            total_update_list.Add(originator);
+                            total_update_list.AddRange(req_answ.Successors);
+                            total_update_list.AddRange(req_answ.Predecessors);
+                        }
+                            
 
                         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("<== Successors from {0}:", originator));
                         for (int i = req_answ.Successors.Count - 1; i >= 0; i--)
+                        {
                             m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("    S{0}: {1}", i, req_answ.Successors[i]));
+                        }
 
                         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("<== Predecessors from {0}:", originator));
                         for (int i = 0; i < req_answ.Predecessors.Count; i++)
+                        {
                             m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("    P{0}: {1}", i, req_answ.Predecessors[i]));
+                        }
 
                         total_update_list = removeDuplicates(total_update_list);
 
@@ -795,6 +851,16 @@ namespace TSystems.RELOAD.Topology {
                         List<NodeId> m_new_predecessors = NeighborsFromTotal(total_update_list, false);
                         List<NodeId> m_new_successors = NeighborsFromTotal(total_update_list, true);
 
+                        // REPLICATEST
+                        foreach (NodeId node in LeavingNodes.Keys)
+                        {
+                            if (m_new_predecessors.Contains(node))
+                                m_new_predecessors.Remove(node);
+
+                            if (m_new_successors.Contains(node))
+                                m_new_successors.Remove(node);
+                        }
+
                         Boolean fAnyNewNeighbor = false;
 
                         /*                      if(    IsChangedList(GetApproved(m_predecessors), GetApproved(m_new_predecessors))
@@ -807,6 +873,29 @@ namespace TSystems.RELOAD.Topology {
                             || IsChangedList(m_successors, m_new_successors)) {
                             fAnyNewNeighbor = true;
                         }
+
+                        if (IsChangedList(m_predecessors, m_new_predecessors)) {
+                            //got new predecessor. Handover Keys
+                            Arbiter.Activate(m_ReloadConfig.DispatcherQueue, new IterativeTask<bool>(false, m_transport.HandoverKeys));
+                        }
+
+                        if (IsChangedList(m_successors, m_new_successors))
+                        {
+                            List<NodeId> nodesWithReplicas = new List<NodeId>();
+                            if(m_successors.Count > 0)
+                                nodesWithReplicas.Add(m_successors[0]);
+                            if (m_successors.Count > 1)
+                                nodesWithReplicas.Add(m_successors[1]);
+
+                            if(m_new_successors.Count > 0)
+                                if(!nodesWithReplicas.Contains(m_new_successors[0]))
+                                    Arbiter.Activate(m_ReloadConfig.DispatcherQueue, new IterativeTask<NodeId>(m_new_successors[0], m_transport.StoreReplicas));
+
+                            if (m_new_successors.Count > 1)
+                                if(!nodesWithReplicas.Contains(m_new_successors[1]))
+                                    Arbiter.Activate(m_ReloadConfig.DispatcherQueue, new IterativeTask<NodeId>(m_new_successors[1], m_transport.StoreReplicas));
+                        }
+
                         m_predecessors = m_new_predecessors;
                         m_successors = m_new_successors;
 
@@ -1136,6 +1225,7 @@ namespace TSystems.RELOAD.Topology {
                  */
                 bool fUpdateNeeded = false;
                 bool fWasAdmittingPeer = false;
+                bool fEvaluateReplicas = false;
 
                 SetNodeState(nodeId, NodeState.unknown);
 
@@ -1146,13 +1236,31 @@ namespace TSystems.RELOAD.Topology {
                     }
 
                 if (m_successors.Contains(nodeId)) {
+                    int index = m_successors.IndexOf(nodeId);
+
                     m_successors.Remove(nodeId);
+                    // Leaving nodes will be stored for 5 minutes to make sure we do not learn about them again
+                    AddLeavingNode(nodeId);
                     fUpdateNeeded = true;
+                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ALL, String.Format("Deleted {0} from Successors", nodeId));
+
+                    // Has Successor 1 or 2 crashed? Do we need to send out a new store request for replicas?
+                    if (index < 2 && m_successors.Count > 1)
+                        Arbiter.Activate(m_ReloadConfig.DispatcherQueue, new IterativeTask<NodeId>(m_successors[1], m_transport.StoreReplicas));
                 }
 
                 if (m_predecessors.Contains(nodeId)) {
+                    int index = m_predecessors.IndexOf(nodeId);
+                    if (index == 0)
+                        fEvaluateReplicas = true;
+
                     m_predecessors.Remove(nodeId);
+                    AddLeavingNode(nodeId);
                     fUpdateNeeded = true;
+                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ALL, String.Format("Deleted {0} from Predecessors", nodeId));
+
+                    if (fEvaluateReplicas == true)
+                        m_transport.EvaluateReplicas();
                 }
 
                 foreach (FTableEntry fte in FingerTable)
@@ -1160,6 +1268,14 @@ namespace TSystems.RELOAD.Topology {
                         fte.Successor = null;
                         fte.valid = false;
                     }
+
+                if (m_RtTable.ContainsKey(nodeId.ToString()))
+                {
+                    m_RtTable.Remove(nodeId.ToString());
+                    AddLeavingNode(nodeId);
+                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ALL, String.Format("Deleted {0} from Routing Table", nodeId));
+                    fUpdateNeeded = true;
+                }
 
                 if (fUpdateNeeded && !m_ReloadConfig.IamClient) {
                     SendUpdateToAllNeighbors();
@@ -1182,6 +1298,12 @@ namespace TSystems.RELOAD.Topology {
                         return false;
 
                 return true;
+            }
+
+            public void AddLeavingNode(NodeId OriginatorId)
+            {
+                if(!m_LeavingNodes.ContainsKey(OriginatorId))
+                    m_LeavingNodes.Add(OriginatorId, DateTime.Now);
             }
         }
 
@@ -1229,6 +1351,11 @@ namespace TSystems.RELOAD.Topology {
             AttachReqAns attreq = new AttachReqAns();
             m_localnode = new Node(m_id, attreq.IPAddressToIceCandidate(
               Address, m_ReloadConfig.ListenPort));
+
+            
+            m_localnode.NoIceCandidates = m_localnode.IceCandidates;  // markus: backup of NOICE candidates
+
+
             m_routing_table = new RoutingTable(m_localnode, machine);
             m_ReloadConfig.LocalNode = m_localnode;
 
