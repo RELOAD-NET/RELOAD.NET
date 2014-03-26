@@ -470,5 +470,17 @@ namespace ReloadGUI.Properties {
                 this["UseSR"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("overlay-reload.implementers.org")]
+        public string Overlay1Name {
+            get {
+                return ((string)(this["Overlay1Name"]));
+            }
+            set {
+                this["Overlay1Name"] = value;
+            }
+        }
     }
 }
