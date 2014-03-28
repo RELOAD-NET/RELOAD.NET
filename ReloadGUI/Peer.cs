@@ -263,6 +263,9 @@ namespace ReloadGUI
             // SR
             ReloadGlobals.UseSR = ReloadGUI.Properties.Settings.Default.UseSR;
 
+            // SO
+            ReloadGlobals.UseSO = ReloadGUI.Properties.Settings.Default.UseSO;
+
 
             //we can't support multiple certs per commandline in this MDI app, we need enrollment server here
             if (ReloadGlobals.TLS)

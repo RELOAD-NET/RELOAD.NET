@@ -473,6 +473,18 @@ namespace ReloadGUI.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool UseSO {
+            get {
+                return ((bool)(this["UseSO"]));
+            }
+            set {
+                this["UseSO"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("overlay-reload.implementers.org")]
         public string Overlay1Name {
             get {

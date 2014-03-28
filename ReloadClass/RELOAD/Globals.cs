@@ -306,6 +306,9 @@ namespace TSystems.RELOAD {
       // Use SR
     public static bool UseSR;
 
+      // Use SO
+    public static bool UseSO;
+
 
     /* Set this value to false, to set a fixed IP for enrollment server 
  */

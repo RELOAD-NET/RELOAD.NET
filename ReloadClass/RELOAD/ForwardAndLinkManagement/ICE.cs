@@ -552,10 +552,13 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
 
 
             // SO CANDIDATE
-            //IceCandidate hostSOCandidate = GatherHostSOCandidate(localIPAddress);
-            //// add candidate to list
-            //if (hostSOCandidate != null)
-            //    iceCandidates.Add(hostSOCandidate);
+            if (ReloadGlobals.UseSO)
+            {
+                IceCandidate hostSOCandidate = GatherHostSOCandidate(localIPAddress);
+                // add candidate to list
+                if (hostSOCandidate != null)
+                    iceCandidates.Add(hostSOCandidate);
+            }
 
 
             // ACTIVE CANDIDATE: no real gathering, rather a placeholder. Inside the method the structure will be filled with local IP and IceExtension. No port allocation.
@@ -871,10 +874,13 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
 
 
             // SO CANDIDATE
-            //IceCandidate srSOCandidate = GatherSRSOCandidate(localIPAddress);
-            //// add candidate to list
-            //if (srSOCandidate != null)
-            //    iceCandidates.Add(srSOCandidate);
+            if (ReloadGlobals.UseSO)
+            {
+                IceCandidate srSOCandidate = GatherSRSOCandidate(localIPAddress);
+                // add candidate to list
+                if (srSOCandidate != null)
+                    iceCandidates.Add(srSOCandidate);
+            }
 
 
             // ACTIVE CANDIDATE
@@ -1135,16 +1141,19 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
             // maybe there is a Software-Firewall installed, so we need SO candidates
 
             // worked passive candidate gathering? else we don't have to try SO gathering
-            //if (naPassiveCandidate != null)
-            //{
-            //    IceCandidate naSOCandidate = null;
+            if (ReloadGlobals.UseSO)
+            {
+                if (naPassiveCandidate != null)
+                {
+                    IceCandidate naSOCandidate = null;
 
-            //    naSOCandidate = GatherNASOCandidate(localIPAddress);
+                    naSOCandidate = GatherNASOCandidate(localIPAddress);
 
-            //    // if SO gathering worked add candidate to list
-            //    if (naSOCandidate != null)
-            //        iceCandidates.Add(naSOCandidate);
-            //}
+                    // if SO gathering worked add candidate to list
+                    if (naSOCandidate != null)
+                        iceCandidates.Add(naSOCandidate);
+                }
+            }
 
 
             // ACTIVE CANDIDATE

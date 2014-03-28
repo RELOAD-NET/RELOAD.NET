@@ -116,6 +116,9 @@
     <Setting Name="UseSR" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">False</Value>
     </Setting>
+    <Setting Name="UseSO" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
     <Setting Name="Overlay1Name" Type="System.String" Scope="User">
       <Value Profile="(Default)">overlay-reload.implementers.org</Value>
     </Setting>
