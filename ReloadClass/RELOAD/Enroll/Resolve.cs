@@ -274,7 +274,8 @@ namespace TSystems.RELOAD.Enroll {
                 string applicationDirectory = Path.GetDirectoryName(basex);
                 tr_xml = new StreamReader(applicationDirectory + @"\\reload_enroll_config.xml");
 #else
-        tr_xml = new StreamReader(@"reload_enroll_config.xml");
+        //tr_xml = new StreamReader(@"reload_enroll_config.xml");
+          tr_xml = new StreamReader(@"..\..\config\config-reload-selfsigned.xml");
 #endif
       }
 
@@ -312,6 +313,7 @@ namespace TSystems.RELOAD.Enroll {
                 ReloadGlobals.CERTIFICATE_BY_USER_DATA_MODEL = ReloadGlobals.DataModelFromString(block.kind.datamodel);
             }
           }
+
           string rootcert = p2psipConfig.configuration.rootcert;
 
           if (rootcert != null && rootcert.Length > 0) {
@@ -334,6 +336,8 @@ namespace TSystems.RELOAD.Enroll {
     p2psipConfig.configuration.landmarks.landmarkhost.Length > 0) {
             var landmark = p2psipConfig.configuration.landmarks.landmarkhost[0].address;
           }
+
+          ReloadGlobals.SelfSignPermitted = p2psipConfig.configuration.selfsignedpermitted.Value;
         }
         catch (Exception ex) {
           m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "ReadConfig: " + ex.Message);
@@ -406,7 +410,16 @@ namespace TSystems.RELOAD.Enroll {
       m_ReloadConfig.ReloadLocalNetCertStorage = new MemoryCertStorage();
       m_ReloadConfig.ReloadLocalNetCertStorage.Clear();
 
-      if (EnrollmentUrl != "")
+      if(ReloadGlobals.SelfSignPermitted)
+      {
+          String subjectName = "reload:" + ReloadGlobals.IPAddressFromHost(m_ReloadConfig, ReloadGlobals.HostName).ToString() + ":" + m_ReloadConfig.ListenPort;
+          //string subjectName = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.CN;
+          X509Certificate2 cert = Utils.X509Utils.CreateSelfSignedCertificateCOM(subjectName);
+
+          m_ReloadConfig.ReloadLocalNetCertStorage.Add(cert, true);
+      }
+
+      if (EnrollmentUrl != "" && !ReloadGlobals.SelfSignPermitted)
         if (CertificateSigningRequest(EnrollmentUrl) == false) {
           if (m_ReloadConfig.CertName.Length > 0) {
             FileStream fs = new FileStream(m_ReloadConfig.CertName, FileMode.Open, FileAccess.Read);
@@ -433,10 +446,10 @@ namespace TSystems.RELOAD.Enroll {
             throw new System.Exception("Got no certificate!");
 
         /* RELOAD BASE 07, pg. 112 */
-        try {
-          ReloadGlobals.SelfSignPermitted = m_ReloadConfig.Document.Overlay.configuration.selfsignedpermitted.Value;
-        }
-        catch { };
+        //try {
+          //ReloadGlobals.SelfSignPermitted = m_ReloadConfig.Document.Overlay.configuration.selfsignedpermitted.Value; // set in Resolve.cs: ReadConfig()
+        //}
+        //catch { };
 
         if (m_ReloadConfig.MyCertificate.Issuer == m_ReloadConfig.MyCertificate.Subject)
         {
@@ -506,8 +519,8 @@ namespace TSystems.RELOAD.Enroll {
 
           /* private certificate configuration */
 
-          //String CN = "reload:" + ReloadGlobals.IPAddressFromHost(m_ReloadConfig, ReloadGlobals.HostName).ToString() + ":" + m_ReloadConfig.ListenPort;
-          String CN = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.CN;
+          String CN = "reload:" + ReloadGlobals.IPAddressFromHost(m_ReloadConfig, ReloadGlobals.HostName).ToString() + ":" + m_ReloadConfig.ListenPort;
+          //String CN = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.CN;
           String Country = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.Country;
           String Locality = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.Locality;
           String State = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.State;

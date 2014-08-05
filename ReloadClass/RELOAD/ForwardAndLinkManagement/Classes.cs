@@ -330,7 +330,7 @@ namespace TSystems.RELOAD
 
         // markus
         void StartReloadTLSServer(Socket socket);
-        void StartReloadTLSClient(NodeId nodeid, Socket socket);
+        void StartReloadTLSClient(NodeId nodeid, Socket socket, IPEndPoint attacherEndpoint);
         void SaveConnection(CandidatePair choosenPair);
         Socket GetConnection(CandidatePair choosenPair);
 

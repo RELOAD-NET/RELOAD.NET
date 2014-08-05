@@ -50,10 +50,6 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\Extern\DnDns\DnDns.dll</HintPath>
     </Reference>
-    <Reference Include="ManagedOpenSsl, Version=0.6.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\Extern\ManagedOpenSsl\ManagedOpenSsl.dll</HintPath>
-    </Reference>
     <Reference Include="Microsoft.Ccr.Core, Version=4.0.261.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\Extern\CCR\Microsoft.Ccr.Core.dll</HintPath>
@@ -118,6 +114,23 @@
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>EnrollmentSettings.Designer.cs</LastGenOutput>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <COMReference Include="CERTENROLLLib">
+      <Guid>{728AB348-217D-11DA-B2A4-000E7BBB2B09}</Guid>
+      <VersionMajor>1</VersionMajor>
+      <VersionMinor>0</VersionMinor>
+      <Lcid>0</Lcid>
+      <WrapperTool>tlbimp</WrapperTool>
+      <Isolated>False</Isolated>
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+    </COMReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ManagedOpenSsl\ManagedOpenSsl-2010.csproj">
+      <Project>{73dcc218-655b-485f-8eac-0ce5f2f7343d}</Project>
+      <Name>ManagedOpenSsl-2010</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

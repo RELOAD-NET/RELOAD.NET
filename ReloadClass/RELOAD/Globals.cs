@@ -262,7 +262,8 @@ namespace TSystems.RELOAD {
     public static UInt32 CERTIFICATE_BY_NODE_KIND_ID = 3;
     public static UInt32 CERTIFICATE_BY_USER_KIND_ID = 16;
 
-    public static bool SelfSignPermitted = false;
+    public static bool SelfSignPermitted = false; // set with configuration document <self-signed-permitted> tag
+
     public static readonly DateTime StartOfEpoch = new DateTime(1970, 1, 1);
 
     public enum DataModel {
@@ -308,7 +309,6 @@ namespace TSystems.RELOAD {
 
       // Use SO
     public static bool UseSO;
-
 
     /* Set this value to false, to set a fixed IP for enrollment server 
  */
@@ -368,7 +368,7 @@ namespace TSystems.RELOAD {
     /*enable fragmentation of outgoing packages (only implemented for TLS)*/
     public static bool FRAGMENTATION = false;
     /* hardcoded fragment_size, not compliant with draft (only implemented for TLS)*/
-    public static uint FRAGMENT_SIZE = 1000;
+    public static uint FRAGMENT_SIZE = 1000; // value from GUI Settings is used later
 
     /* hardcoded fragment_size, not compliant with draft (only implemented for TLS)*/
     public static uint DbgPacketCount = 0;
@@ -1055,8 +1055,8 @@ namespace TSystems.RELOAD {
 
             /* TODO: Handle non-self signed certificates */
             //if (m_ReloadOverlayConfiguration.Overlay.configuration.selfsignedpermitted.digest.ToLower().Trim() == "sha1")
-            {
-                SHA1CryptoServiceProvider sha1 = new SHA1CryptoServiceProvider();
+            {  
+                SHA1CryptoServiceProvider sha1 = new SHA1CryptoServiceProvider(); // TODO: read digest from configuration
                 shaHash = sha1.ComputeHash(publicKey);
             }
             /* TKTODO no sha256 definition for Compact Framework

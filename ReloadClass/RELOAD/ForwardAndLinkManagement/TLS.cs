@@ -130,6 +130,30 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
             }
         }
 
+        // callback methods invoked by the RemoteCertificateValidationDelegate
+        //
+        public bool ValidateServerCertificate(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
+        {
+            if (sslPolicyErrors == SslPolicyErrors.None || (sslPolicyErrors == SslPolicyErrors.RemoteCertificateChainErrors && ReloadGlobals.SelfSignPermitted)) 
+                return true;
+
+            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Certificate error: {0}", sslPolicyErrors));
+
+            // Do not allow this client to communicate with unauthenticated servers. 
+            return false;
+        }
+
+        public bool ValidateClientCertificate(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
+        {
+            if (sslPolicyErrors == SslPolicyErrors.None || (sslPolicyErrors == SslPolicyErrors.RemoteCertificateChainErrors && ReloadGlobals.SelfSignPermitted))
+                return true;
+
+            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Certificate error: {0}", sslPolicyErrors));
+
+            // Do not allow this server to communicate with unauthenticated clients. 
+            return false;
+        }
+
         public void InitReloadTLSServer(Socket associatedSocket)
         {
             ReloadTLSServer reload_server = new ReloadTLSServer(associatedSocket);
@@ -143,7 +167,11 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
             // A client has connected
             try
             {
-                ReceiverSslStream = new SslStream(reload_server.AssociatedClient.GetStream(), false);
+                //ReceiverSslStream = new SslStream(reload_server.AssociatedClient.GetStream(), false);
+                ReceiverSslStream = new SslStream(reload_server.AssociatedClient.GetStream(), false, new RemoteCertificateValidationCallback(ValidateClientCertificate), null); // use RemoteCertificateValidationCallback
+            
+                // Debug
+                //File.WriteAllBytes("MyCertificate_Server_Debug.cer", m_ReloadConfig.MyCertificate.Export(X509ContentType.Cert));
 
                 reload_server.AssociatedSslStream = ReceiverSslStream;
 
@@ -167,22 +195,26 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                             SslProtocols.Tls,                   // Use TLS 1.0
                             false                               // check Certificate revocation
                         );
+                    } 
+                    catch(System.Security.Authentication.AuthenticationException authex)
+                    {
+
                     }
                     catch (Exception ex)
                     {
                         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, ex.Message);
                     }
+
+                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("TLS_S: TLS Connection established: Protocol: {0}, Key exchange: {1} strength {2}, Hash: {3} strength {4}, Cipher: {5} strength {6}, IsEncrypted: {7}, IsSigned: {8}",
+                      reload_server.AssociatedSslStream.SslProtocol,
+                      reload_server.AssociatedSslStream.KeyExchangeAlgorithm, reload_server.AssociatedSslStream.KeyExchangeStrength,
+                      reload_server.AssociatedSslStream.HashAlgorithm, reload_server.AssociatedSslStream.HashStrength,
+                      reload_server.AssociatedSslStream.CipherAlgorithm, reload_server.AssociatedSslStream.CipherStrength,
+                      reload_server.AssociatedSslStream.IsEncrypted, reload_server.AssociatedSslStream.IsSigned));
+
+                    X509Certificate2 remoteCert = new X509Certificate2(reload_server.AssociatedSslStream.RemoteCertificate);
+                    CertificateValidate(reload_server, remoteCert);
                 }
-
-                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("TLS_S: TLS Connection established: Protocol: {0}, Key exchange: {1} strength {2}, Hash: {3} strength {4}, Cipher: {5} strength {6}, IsEncrypted: {7}, IsSigned: {8}",
-                  reload_server.AssociatedSslStream.SslProtocol,
-                  reload_server.AssociatedSslStream.KeyExchangeAlgorithm, reload_server.AssociatedSslStream.KeyExchangeStrength,
-                  reload_server.AssociatedSslStream.HashAlgorithm, reload_server.AssociatedSslStream.HashStrength,
-                  reload_server.AssociatedSslStream.CipherAlgorithm, reload_server.AssociatedSslStream.CipherStrength,
-                  reload_server.AssociatedSslStream.IsEncrypted, reload_server.AssociatedSslStream.IsSigned));
-
-                X509Certificate2 remoteCert = new X509Certificate2(reload_server.AssociatedSslStream.RemoteCertificate);
-                CertificateValidate(reload_server, remoteCert);
 
             }
             catch (AuthenticationException ex)
@@ -460,7 +492,8 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
 
                 // code encapsulated in method for easy reuse in ICE processing
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("linkSend: Authenticating as Client on {0}", socket.LocalEndPoint));
-                InitReloadTLSClient(send_params, socket);
+                IPEndPoint attacherEndpoint = new IPEndPoint(send_params.destinationAddress, send_params.port);
+                InitReloadTLSClient(send_params, socket, attacherEndpoint);
                                 
             }
 
@@ -525,7 +558,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 {
                     // code encapsulated in method for easy reuse in ICE processing
                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("ICElinkSend: Authenticating as Client on {0}", send_params.connectionSocket.LocalEndPoint));
-                    InitReloadTLSClient(send_params, send_params.connectionSocket);
+                    InitReloadTLSClient(send_params, send_params.connectionSocket, new IPEndPoint(IPAddress.Any, 0) /*ICElinkSend is never used, so the attacherEndpoint param does not matter*/);
                 }
                 else
                 {
@@ -558,16 +591,16 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 association.TLSConnectionWaitQueue.Enqueue(send_params.buffer);
         }
 
-        public void InitReloadTLSClient(ReloadSendParameters send_params, Socket socket)
+        public void InitReloadTLSClient(ReloadSendParameters send_params, Socket socket, IPEndPoint attacherEndpoint)
         {
             ReloadTLSClient reload_client = new ReloadTLSClient(socket);
-
             reload_client.AssociatedClient = new TcpClient();
             reload_client.AssociatedClient.Client = reload_client.AssociatedSocket;
 
             /* Setup new SSL Stream */
 
-            SslStream SenderSslStream = new SslStream(reload_client.AssociatedClient.GetStream(), false);
+            //SslStream SenderSslStream = new SslStream(reload_client.AssociatedClient.GetStream(), false);
+            SslStream SenderSslStream = new SslStream(reload_client.AssociatedClient.GetStream(), false, new RemoteCertificateValidationCallback(ValidateServerCertificate), null); // use RemoteCertificateValidationCallback
 
             reload_client.AssociatedSslStream = SenderSslStream;
 
@@ -578,11 +611,19 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
             {
                 X509Certificate2Collection certificates = new X509Certificate2Collection();
                 certificates.Add(m_ReloadConfig.MyCertificate);
-                certificates.Add(m_ReloadConfig.RootCertificate);
 
-                //String remoteClient = "reload:" + send_params.destinationAddress.ToString() + ":" + send_params.port.ToString();
-                String remoteClient = "reload";
+                if (m_ReloadConfig.RootCertificate != null) // root cert is null when using self signed certs
+                    certificates.Add(m_ReloadConfig.RootCertificate);
 
+
+                // Debug
+                //File.WriteAllBytes("MyCertificate_Client_Debug.cer", m_ReloadConfig.MyCertificate.Export(X509ContentType.Cert));
+                //File.WriteAllBytes("RootCertificate_Client_Debug.cer", m_ReloadConfig.RootCertificate.Export(X509ContentType.Cert));
+
+                String remoteClient = "reload:" + attacherEndpoint.Address.ToString() + ":" + attacherEndpoint.Port.ToString();
+
+                //String remoteClient = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.CN;
+                
                 // The server name must match the name on the server certificate. 
                 reload_client.AssociatedSslStream.AuthenticateAsClient(remoteClient, certificates, SslProtocols.Tls, false);
 
@@ -595,6 +636,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
 
                 X509Certificate2 remoteCert = new X509Certificate2(reload_client.AssociatedSslStream.RemoteCertificate);
                 CertificateValidate(reload_client, remoteCert);
+
             }
             catch (AuthenticationException ex)
             {

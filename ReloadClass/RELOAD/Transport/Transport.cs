@@ -681,7 +681,7 @@ namespace TSystems.RELOAD.Transport
                                 NextHopNode.IceCandidates[0].addr_port.port == BootstrapServerList[iCycleBootstrap - 1].Port)
                                 bsTransId = reloadSendMsg.TransactionID;
                         }
-
+                   
                         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_RELOAD,
                           String.Format("{0} ==> {1} Dest={2} TransId={3:x16}",
                           RELOAD_MessageCode.Attach_Request.ToString().PadRight(16, ' '),
@@ -2959,9 +2959,13 @@ namespace TSystems.RELOAD.Transport
                                     // get connection
                                     Socket socket = GetForwardingAndLinkManagementLayer().GetConnection(choosenPair);
 
+                                    // Get IPAdress and Port of the attacher from attachers certificate cn
+                                    System.Security.Cryptography.X509Certificates.X509Certificate2 tempcert = new System.Security.Cryptography.X509Certificates.X509Certificate2(recmsg.security_block.Certificates[0].Certificate);
+                                    IPEndPoint attacherEndpoint =
+                                        new IPEndPoint(IPAddress.Parse(tempcert.SubjectName.Name.ToString().Split(':')[1]),
+                                                       Convert.ToInt32( tempcert.SubjectName.Name.ToString().Split(':')[2]));
                                     // StartReloadTLSClient
-                                    GetForwardingAndLinkManagementLayer().StartReloadTLSClient(OriginatorID, socket);
-
+                                    GetForwardingAndLinkManagementLayer().StartReloadTLSClient(OriginatorID, socket, attacherEndpoint);
 
                                     // for all candidates send_params.done = true
                                     for (int i = 0; i < checkList.candidatePairs.Count; i++)
@@ -3246,7 +3250,7 @@ namespace TSystems.RELOAD.Transport
                     }
                 }
             }
-            catch (Exception)
+            catch (Exception e)
             {
 
                 throw;
@@ -3959,12 +3963,10 @@ namespace TSystems.RELOAD.Transport
         {
             //return create_reload_message(destination, ++m_ReloadConfig.TransactionID,     // markus: commented out
             //    new AttachReqAns(m_topology.LocalNode, true, fForceSendUpdate));
-
             bool gatherActiveHostOnly = false;
 
             if (destination == new Destination(new ResourceId(m_topology.LocalNode.Id + (byte)1)))
                 gatherActiveHostOnly = true;
-
 
 
             else

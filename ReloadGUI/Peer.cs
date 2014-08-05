@@ -268,8 +268,8 @@ namespace ReloadGUI
 
 
             //we can't support multiple certs per commandline in this MDI app, we need enrollment server here
-            if (ReloadGlobals.TLS)
-                ReloadGlobals.ForceLocalConfig = false;
+            //if (ReloadGlobals.TLS)
+            //    ReloadGlobals.ForceLocalConfig = false;
         }
 
         private void updateLog(int tabid, string s)

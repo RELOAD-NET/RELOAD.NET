@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<overlay xmlns="urn:ietf:params:xml:ns:p2p:config-base"
+  xmlns:ext="urn:ietf:params:xml:ns:p2p:config-ext1"
+  xmlns:chord="urn:ietf:params:xml:ns:p2p:config-chord"
+  xmlns:share="urn:ietf:params:xml:ns:p2p:config-base:share"
+  xmlns:disco="urn:ietf:params:xml:ns:p2p:config-base:disco">
+	<configuration instance-name="" sequence="1" expiration="3005-01-01T00:00:00Z">
+		<self-signed-permitted digest="sha1">true</self-signed-permitted>
+		<bootstrap-node address="" port=""/>
+		<initial-ttl>30</initial-ttl>
+		<clients-permitted>true</clients-permitted>
+		<turn-density>10</turn-density>
+		<max-message-size>4000</max-message-size>
+		<topology-plugin>chord</topology-plugin>
+		<chord:chord-ping-interval>100</chord:chord-ping-interval>
+		<chord:chord-update-interval>200</chord:chord-update-interval>
+		<required-kinds>
+			<kind-block>
+				<kind name="sip-registration">
+					<data-model>dictionary</data-model>
+					<access-control>user-match</access-control>
+					<max-count>1</max-count>
+					<max-size>100</max-size>
+				</kind>
+			</kind-block>
+		</required-kinds>
+	</configuration>
+</overlay>

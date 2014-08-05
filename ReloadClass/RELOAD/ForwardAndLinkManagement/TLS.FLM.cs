@@ -53,12 +53,12 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
             link.InitReloadTLSServer(socket);
         }
 
-        public void StartReloadTLSClient(NodeId nodeid, Socket socket)
+        public void StartReloadTLSClient(NodeId nodeid, Socket socket, IPEndPoint attacherEndpoint)
         {
             // simply call InitReloadTLSClient
             ReloadSendParameters send_params = new ReloadSendParameters();
-
-            link.InitReloadTLSClient(send_params, socket);
+            send_params.destinationAddress = attacherEndpoint.Address;
+            link.InitReloadTLSClient(send_params, socket, attacherEndpoint);
 
             if (send_params.connectionTableEntry != null)
             {
@@ -277,7 +277,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                     ByteArrayList = reloadMessage.ToBytesFragmented(ReloadGlobals.FRAGMENT_SIZE);
                 }
             }
-
+            
             foreach (byte[] ByteArray in ByteArrayList)
             {
                 /* Try to find a matching connection using node id or target address*/
