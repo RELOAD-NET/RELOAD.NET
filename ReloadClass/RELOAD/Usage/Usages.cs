@@ -1346,13 +1346,14 @@ namespace TSystems.RELOAD.Usage {
       if (arguments[0] == null || arguments[1] == null || arguments[2] == null)
         throw new ArgumentNullException("Not enough arguments! Any of the the arguments is null!");
 
-      username = (string)arguments[0];
+      resourceName = (string)arguments[0];
+      length += (UInt32)resourceName.Length;
+
+      username = (string)arguments[1];
       length += (UInt32)username.Length;
-      localNodeId = new NodeId(Encoding.ASCII.GetBytes((string)arguments[1]));
+      localNodeId = (NodeId)arguments[2];
       length += (UInt32)localNodeId.Digits;
-      //certificate = (string)arguments[2];
-      certificate = (byte[])arguments[2];
-      //length += (UInt32)certificate.Length;
+      certificate = (byte[])arguments[3];
       length += (UInt32)certificate.Length;
 
       return this;
@@ -1363,7 +1364,11 @@ namespace TSystems.RELOAD.Usage {
         // --arc
         var ASCII = Encoding.ASCII;
         const ulong MAX_VALUE = 0xFFFFFFFF;
+
+        ReloadGlobals.WriteOpaqueValue(writer, ASCII.GetBytes(resourceName), MAX_VALUE); // ResourceName
+
         ReloadGlobals.WriteOpaqueValue(writer, ASCII.GetBytes(username), MAX_VALUE); // username
+        var deb = myManager.localNode.Id;
         ReloadGlobals.WriteOpaqueValue(writer, localNodeId.Data, MAX_VALUE); // localNodeId
         ReloadGlobals.WriteOpaqueValue(writer, certificate, MAX_VALUE); // certificate
 
@@ -1381,6 +1386,9 @@ namespace TSystems.RELOAD.Usage {
         try
         {
             bytesCount = IPAddress.NetworkToHostOrder(reader.ReadInt32());
+            result.resourceName = ASCII.GetString(reader.ReadBytes(bytesCount), 0, bytesCount); // ResourceName
+
+            bytesCount = IPAddress.NetworkToHostOrder(reader.ReadInt32());
             result.username = ASCII.GetString(reader.ReadBytes(bytesCount), 0, bytesCount); // username
 
             bytesCount = IPAddress.NetworkToHostOrder(reader.ReadInt32());
@@ -1394,6 +1402,13 @@ namespace TSystems.RELOAD.Usage {
             myManager.m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
                 String.Format("CertificateStore Usage FromReader(): {0}", e.Message));
         }
+
+        // Compute the total usage length
+        result.length = 0
+            + (uint)(result.ResourceName.Length + 4)
+            + (uint)(result.username.Length + 4)
+            + (uint)(result.localNodeId.Data.Length + 4)
+            + (uint)(result.certificate.Length + 4);
 
         return result;
 

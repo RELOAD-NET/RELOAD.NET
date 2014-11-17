@@ -79,7 +79,6 @@
     <Compile Include="RELOAD\ForwardAndLinkManagement\ICE.cs" />
     <Compile Include="RELOAD\Topology\AccessControl.cs" />
     <Compile Include="RELOAD\Usage\ImageStoreUsage.cs" />
-    <Compile Include="RELOAD\Usage\Thread.cs" />
     <Compile Include="RELOAD\Util\BigInt.cs" />
     <Compile Include="RELOAD\ForwardAndLinkManagement\ConnectionTable.cs" />
     <Compile Include="RELOAD\Transport\Dialog.cs" />

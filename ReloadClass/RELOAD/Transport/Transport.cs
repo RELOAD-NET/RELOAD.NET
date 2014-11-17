@@ -985,14 +985,16 @@ namespace TSystems.RELOAD.Transport
                                          * --arc
                                          */
 
-                                        /*
+
                                         // CERTIFICATE_BY_NODE
                                         string resourcename = m_machine.ReloadConfig.LocalNodeID.ToString();
-                                        object[] args = new object[3];
-                                        args[0] = m_machine.ReloadConfig.MyCertificate.Subject;
-                                        args[1] = m_machine.ReloadConfig.LocalNodeID.ToString();
-                                        args[2] = m_machine.ReloadConfig.MyCertificate.RawData;
+                                        object[] args = new object[4];
+                                        args[0] = resourcename;
+                                        args[1] = m_machine.ReloadConfig.MyCertificate.Subject;
+                                        args[2] = m_machine.ReloadConfig.LocalNodeID; 
+                                        args[3] = m_machine.ReloadConfig.MyCertificate.RawData;
 
+                                      
                                         //IUsage certByNode = new CertificateStore(true, m_machine.UsageManager);
                                         IUsage certByNode = m_machine.UsageManager.CreateUsage(Usage_Code_Point.CERTIFICATE_STORE_BY_NODE, 0, args);
                                         certByNode.ResourceName = resourcename;
@@ -1002,11 +1004,26 @@ namespace TSystems.RELOAD.Transport
                                         skdList.Add(certKindData);
 
                                         Arbiter.Activate(m_DispatcherQueue, new IterativeTask<string, List<StoreKindData>>(resourcename, skdList, Store));
+                                     
+
+                                        //m_machine.GatherCommandsInQueue("Store", Usage_Code_Point.CERTIFICATE_STORE_BY_NODE, 0, null, true, args);
+                                        //m_machine.SendCommand("Store");
+
+
 
                                         // CERTIFICATE_BY_USER
                                         resourcename = m_machine.ReloadConfig.MyCertificate.Subject;
-                                        // ... TODO
-                                         */
+                                        args[0] = resourcename;
+
+                                        IUsage certByUser = m_machine.UsageManager.CreateUsage(Usage_Code_Point.CERTIFICATE_STORE_BY_USER, 0, args);
+                                        certByNode.ResourceName = resourcename;
+
+                                        skdList = new List<StoreKindData>();
+                                        certKindData = new StoreKindData(certByUser.KindId, 0, new StoredData(certByUser.Encapsulate(true)));
+                                        skdList.Add(certKindData);
+
+                                        Arbiter.Activate(m_DispatcherQueue, new IterativeTask<string, List<StoreKindData>>(resourcename, skdList, Store));
+
 
                                     }
                                     else
