@@ -1,11 +1,14 @@
-﻿#undef MAKE_IMAGE_STORE_APPATTACH
+﻿//#undef MAKE_IMAGE_STORE_APPATTACH
+#define MAKE_IMAGE_STORE_APPATTACH
 
+using Microsoft.Ccr.Core;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
 using TSystems.RELOAD;
+using TSystems.RELOAD.Application;
 using TSystems.RELOAD.Storage;
 using TSystems.RELOAD.Transport;
 using TSystems.RELOAD.Usage;
@@ -55,6 +58,18 @@ public sealed class ImageStoreUsage : IUsage
 	/// Stored image storedData.
 	/// </summary>
 	public ImageStoreData Data { get; private set; }
+
+    // Update: Create a new ApplicationConnectivity Object for each transport.AppAttachProcedure call and queue them in Transport.ApplicationConnections port --arc
+    ///// <summary>
+    ///// Application-Layer connectivity
+    ///// </summary>
+    //private ApplicationConnectivity m_ApplicationConnection;
+
+    //internal ApplicationConnectivity ApplicationConnection
+    //{
+    //    get { return m_ApplicationConnection; }
+    //    set { m_ApplicationConnection = value; }
+    //}
 
 	/// <summary>
 	/// See also the usage registration procedure at <seealso cref="Machine.InitUsageManager"/>.
@@ -171,7 +186,8 @@ public sealed class ImageStoreUsage : IUsage
 		var _fetchKindResponses = new List<FetchKindResponse>(fetchKindResponses); // copy of fetchKindResponses
 		foreach (FetchKindResponse fetchKindResponse in _fetchKindResponses)
 		{
-			if (fetchResponse.kind == this.KindId)
+            //if (fetchResponse.kind == this.KindId)
+            if (fetchKindResponse.kind == this.KindId)
 			{
 				fetchResponse = fetchKindResponse;
 				break;
@@ -184,18 +200,38 @@ public sealed class ImageStoreUsage : IUsage
 		if (fetchResponse == null)
 			return;
 
+        //transport.NextHopToDestination()
+
 		// Make an AppAttach request for every attached usage
 		var storedDatas = fetchResponse.values;
 		foreach (StoredData storedData in storedDatas)
 		{
 			ImageStoreUsage usage = (ImageStoreUsage)storedData.Value.GetUsageValue;
 
+            // Determine the destination node, wich is responsible for the data --arc
+            bool direct = false;
+            TSystems.RELOAD.Topology.Node destNode = transport.NextHopToDestination(new Destination(new ResourceId(usage.ResourceName)), ref direct);
+
+            // The Usage starts the AppProcedure() and so it is the source of the following AppAttach-Req/Ans
+            // AppAttach-Request/Response have an application attribute (RFC 6.5.2.1. Request Definition / 6.5.2.2. Response Definition)
+            // Here the usage determines this application attribute --arc
+            UInt16 application = (UInt16)TSystems.RELOAD.Application.Application_ID.IMAGE_STORE;
+
+            // Controlling Agent initializes the AppAttachProcedure and knows about the previously fetched usage
+            // instantiate an ApplicationConnectivity object with that fetched usage info and queue it in the Transport.ApplicationConnections port
+            ApplicationConnectivity applicationConnection = new ApplicationConnectivity(UsageManager.m_ReloadConfig, usage, application);
+
+            //lock (transport.ApplicationConnections)
+            transport.ApplicationConnections.Post(applicationConnection);
+
 			Arbiter.Activate(UsageManager.m_DispatcherQueue,
-				new IterativeTask<Destination>(
-					new Destination(usage.Data.NodeId),
+				new IterativeTask<Destination, UInt16>(
+                //new Destination(usage.Data.NodeId),
+                new Destination(destNode.Id), // app attach to node, storing the image
+                application,
 				transport.AppAttachProcedure));
 		}
-
+        
 #else // Don't make AppAttach
 
 		fetchKindResponses.Clear();

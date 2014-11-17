@@ -126,7 +126,8 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 });
 
                 // code encapsulated in method for easy reuse in ICE processing
-                InitReloadTLSServer(associatedSocket);
+                ReloadTLSServer reloadserver;
+                InitReloadTLSServer(associatedSocket, false, out reloadserver);
             }
         }
 
@@ -154,7 +155,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
             return false;
         }
 
-        public void InitReloadTLSServer(Socket associatedSocket)
+        public void InitReloadTLSServer(Socket associatedSocket, bool isForAppAttach, out ReloadTLSServer reloadserver)
         {
             ReloadTLSServer reload_server = new ReloadTLSServer(associatedSocket);
 
@@ -213,7 +214,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                       reload_server.AssociatedSslStream.IsEncrypted, reload_server.AssociatedSslStream.IsSigned));
 
                     X509Certificate2 remoteCert = new X509Certificate2(reload_server.AssociatedSslStream.RemoteCertificate);
-                    CertificateValidate(reload_server, remoteCert);
+                    CertificateValidate(reload_server, remoteCert, isForAppAttach);
                 }
 
             }
@@ -233,6 +234,16 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
             {
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("Receiving data failed: {0}", ex.Message));
             }
+
+            // App Attach --arc
+            //
+            if (isForAppAttach) // Leave here if TLS Server is for app attach
+            {
+                reloadserver = reload_server; // out param
+                return;
+            }
+            else
+                reloadserver = null;
 
             if (associatedSocket != null)
             {
@@ -492,8 +503,12 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
 
                 // code encapsulated in method for easy reuse in ICE processing
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("linkSend: Authenticating as Client on {0}", socket.LocalEndPoint));
-                IPEndPoint attacherEndpoint = new IPEndPoint(send_params.destinationAddress, send_params.port);
-                InitReloadTLSClient(send_params, socket, attacherEndpoint);
+
+                //// TODO: change InitReloadTLSClient and StartReloadTLSClient IPEndpoint  attacherEndpoint param to String attacher (== Subject from attacher certificate)
+                ////       a fetch for the CertificateStore usage can give you the Subject here.
+                IPEndPoint attacherEndpoint = new IPEndPoint(send_params.destinationAddress, send_params.port); 
+                ReloadTLSClient reloadclient;
+                InitReloadTLSClient(send_params, socket, attacherEndpoint, false, out reloadclient);
                                 
             }
 
@@ -557,8 +572,9 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 if (send_params.connectionSocket != null && send_params.connectionSocket.Connected)
                 {
                     // code encapsulated in method for easy reuse in ICE processing
+                    ReloadTLSClient reloadclient;
                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("ICElinkSend: Authenticating as Client on {0}", send_params.connectionSocket.LocalEndPoint));
-                    InitReloadTLSClient(send_params, send_params.connectionSocket, new IPEndPoint(IPAddress.Any, 0) /*ICElinkSend is never used, so the attacherEndpoint param does not matter*/);
+                    InitReloadTLSClient(send_params, send_params.connectionSocket, new IPEndPoint(IPAddress.Any, 0), false, out reloadclient /*ICElinkSend is never used, so the attacherEndpoint and isForAppAttach param does not matter*/);
                 }
                 else
                 {
@@ -591,7 +607,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 association.TLSConnectionWaitQueue.Enqueue(send_params.buffer);
         }
 
-        public void InitReloadTLSClient(ReloadSendParameters send_params, Socket socket, IPEndPoint attacherEndpoint)
+        public void InitReloadTLSClient(ReloadSendParameters send_params, Socket socket, IPEndPoint attacherEndpoint, bool isForAppAttach, out ReloadTLSClient reloadclient)
         {
             ReloadTLSClient reload_client = new ReloadTLSClient(socket);
             reload_client.AssociatedClient = new TcpClient();
@@ -620,7 +636,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 //File.WriteAllBytes("MyCertificate_Client_Debug.cer", m_ReloadConfig.MyCertificate.Export(X509ContentType.Cert));
                 //File.WriteAllBytes("RootCertificate_Client_Debug.cer", m_ReloadConfig.RootCertificate.Export(X509ContentType.Cert));
 
-                String remoteClient = "reload:" + attacherEndpoint.Address.ToString() + ":" + attacherEndpoint.Port.ToString();
+                String remoteClient = "reload:" + attacherEndpoint.Address.ToString() + ":" + attacherEndpoint.Port.ToString(); //// TODO: change attacherEndpoint param to "attacher" that is equal to subject from attachers certificate (then you don't have to build it here and don't need any requirements on subject names!!!)
 
                 //String remoteClient = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.CN;
                 
@@ -635,7 +651,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                     reload_client.AssociatedSslStream.IsEncrypted, reload_client.AssociatedSslStream.IsSigned));
 
                 X509Certificate2 remoteCert = new X509Certificate2(reload_client.AssociatedSslStream.RemoteCertificate);
-                CertificateValidate(reload_client, remoteCert);
+                CertificateValidate(reload_client, remoteCert, isForAppAttach);
 
             }
             catch (AuthenticationException ex)
@@ -652,6 +668,16 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
             }
 
             m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_SOCKET, String.Format("TLS_C: SBB client object {0}", reload_client.GetHashCode()));
+
+            // App Attach --arc
+            //
+            if (isForAppAttach) // Leave here if TLS Client is for app attach
+            {
+                reloadclient = reload_client; // out param
+                return;
+            }
+            else 
+                reloadclient = null;
 
             Arbiter.Activate(m_DispatcherQueue, new IterativeTask<object>(reload_client, linkReceive));
 
@@ -886,7 +912,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
 		// Because of different callback signatures...
 		private void SBB_OnCertificateValidate(object Sender, TElX509Certificate X509Certificate, ref TSBBoolean Validate)
 #else
-        private void CertificateValidate(object Sender, System.Security.Cryptography.X509Certificates.X509Certificate2 X509Certificate)
+        private void CertificateValidate(object Sender, System.Security.Cryptography.X509Certificates.X509Certificate2 X509Certificate, bool isForAppAttach)
 #endif
         {
             string rfc822Name = null;
@@ -911,7 +937,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
 
                 connectionTableEntry = m_connection_table.lookupEntry(nodeid);
 
-                if (connectionTableEntry == null)
+                if (connectionTableEntry == null && !isForAppAttach) // !isForAppAttach --> don't add the connection for an app attach to connection table
                 {
                     connectionTableEntry = new ReloadConnectionTableEntry() { secureObject = Sender, LastActivity = DateTime.Now };
                     connectionTableEntry.NodeID = nodeid;

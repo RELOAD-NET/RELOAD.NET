@@ -53,7 +53,7 @@ namespace TSystems.RELOAD.Transport
 
         private Dictionary<UInt64, SortedDictionary<UInt32, MessageFragment>> fragmentedMessageBuffer = new Dictionary<ulong, SortedDictionary<uint, MessageFragment>>();
 
-        private DispatcherQueue m_DispatcherQueue;
+        public DispatcherQueue m_DispatcherQueue; // public for access in Usage (receivers)
         private Machine m_machine;
         private TopologyPlugin m_topology;
         private ReloadConfig m_ReloadConfig = null;
@@ -62,7 +62,19 @@ namespace TSystems.RELOAD.Transport
         // markus
         private ThreadSafeDictionary<ulong, List<IceCandidate>> m_attachRequestCandidates = new ThreadSafeDictionary<ulong, List<IceCandidate>>();
         // end markus
+        private ThreadSafeDictionary<ulong, List<IceCandidate>> m_appAttachRequestCandidates = new ThreadSafeDictionary<ulong, List<IceCandidate>>();
 
+        private Port<TSystems.RELOAD.Application.ApplicationConnectivity> m_ApplicationConnections = new Port<Application.ApplicationConnectivity>();
+        
+        /// <summary>
+        /// Port to queue ApplicationConnectivity objects
+        /// They are used for application layer direct connection after app attach
+        /// </summary>
+        public Port<TSystems.RELOAD.Application.ApplicationConnectivity> ApplicationConnections // --arc
+        {
+          get { return m_ApplicationConnections; }
+          set { m_ApplicationConnections = value; }
+        }
 
         /// <summary>
         /// Notifies about store status
@@ -465,12 +477,11 @@ namespace TSystems.RELOAD.Transport
             }
         }
 
-        public IEnumerator<ITask> AppAttachProcedure(Destination dest)
+        public IEnumerator<ITask> AppAttachProcedure(Destination dest, UInt16 application)
         {
             ReloadMessage reloadSendMsg;
-
-            reloadSendMsg = create_app_attach_req(dest);
-
+            reloadSendMsg = create_app_attach_req(dest, application);
+          
             if (dest.type != DestinationType.node)
             {
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("AppAttachProcedure failed: unexpected destination type"));
@@ -521,8 +532,7 @@ namespace TSystems.RELOAD.Transport
                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, "AppAttachProcedure: " + ex.Message);
                 }
 
-                yield return Arbiter.Receive(false, reloadDialog.Done, done => { });
-
+                yield return Arbiter.Receive(false, reloadDialog.Done, done => {});
 
                 if (!reloadDialog.Error && reloadDialog.ReceivedMessage != null)
                     break;
@@ -962,6 +972,42 @@ namespace TSystems.RELOAD.Transport
                                         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_MEASURE, String.Format("Join:{0}", joiningTime.TotalSeconds.ToString()));
 
                                         m_topology.routing_table.SendUpdateToAllNeighbors();
+
+                                        
+                                        /* RFC Ch. 11.3.1 Self-Generated Credentials
+                                         * Once the node has constructed a self-signed certificate, it MAY join the overlay.
+                                         * It MUST store its certificate in the overlay (Section 8), but SHOULD look to see if the user name is already taken and, if so, choose another user name.
+                                         *
+                                         * RFC Ch. 8
+                                         *  A user/node MUST store its certificate at Resource-IDs derived from two Resource Names:
+                                                o  The user name in the certificate. (CERTIFICATE_BY_USER )
+                                                o  The Node-ID in the certificate. (CERTIFICATE_BY_NODE)
+                                         * --arc
+                                         */
+
+                                        /*
+                                        // CERTIFICATE_BY_NODE
+                                        string resourcename = m_machine.ReloadConfig.LocalNodeID.ToString();
+                                        object[] args = new object[3];
+                                        args[0] = m_machine.ReloadConfig.MyCertificate.Subject;
+                                        args[1] = m_machine.ReloadConfig.LocalNodeID.ToString();
+                                        args[2] = m_machine.ReloadConfig.MyCertificate.RawData;
+
+                                        //IUsage certByNode = new CertificateStore(true, m_machine.UsageManager);
+                                        IUsage certByNode = m_machine.UsageManager.CreateUsage(Usage_Code_Point.CERTIFICATE_STORE_BY_NODE, 0, args);
+                                        certByNode.ResourceName = resourcename;
+
+                                        List<StoreKindData> skdList = new List<StoreKindData>();
+                                        StoreKindData certKindData = new StoreKindData(certByNode.KindId, 0, new StoredData(certByNode.Encapsulate(true)));
+                                        skdList.Add(certKindData);
+
+                                        Arbiter.Activate(m_DispatcherQueue, new IterativeTask<string, List<StoreKindData>>(resourcename, skdList, Store));
+
+                                        // CERTIFICATE_BY_USER
+                                        resourcename = m_machine.ReloadConfig.MyCertificate.Subject;
+                                        // ... TODO
+                                         */
+
                                     }
                                     else
                                     {
@@ -1742,7 +1788,8 @@ namespace TSystems.RELOAD.Transport
         {
             ReloadMessage reloadSendMsg;
             m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("AppAttachProcedure to {0} via GateWay {1}", dest, viaGateWay));
-            reloadSendMsg = create_app_attach_req(new Destination(new NodeId(viaGateWay.Data)));
+            UInt16 application = 0; // TODO: supply this overload of AppAttachProcedure method with application-id param --arc
+            reloadSendMsg = create_app_attach_req(new Destination(new NodeId(viaGateWay.Data)), application);
             reloadSendMsg.forwarding_header.destination_list.Add(dest);
 
             if (reloadSendMsg.AddDestinationOverlay(overlayName))
@@ -2833,6 +2880,7 @@ namespace TSystems.RELOAD.Transport
                                 //CheckList checkList = ICE.FormCheckList(attachAnswer.ice_candidates, req_answ.ice_candidates, false);
                                 CheckList checkList = ICE.FormCheckList(localIceCandidatesCopy, remoteIceCandidatesCopy, false);
 
+                                Console.WriteLine("reload_attach_inbound - request - print pairs");
                                 ICE.PrintCandidatePairList(checkList.candidatePairs);
 
                                 Console.WriteLine("ThreadId: {0}, send_params einfügen: checkList count {1}", Thread.CurrentThread.ManagedThreadId, checkList.candidatePairs.Count);
@@ -2945,9 +2993,9 @@ namespace TSystems.RELOAD.Transport
                                 }
 
                                 // Close all sockets of all candidate pairs not nominated
-                                //for (int i = 0; i < checkList.candidatePairs.Count; i++)
-                                //    if ((!checkList.candidatePairs[i].nominated) || (checkList.candidatePairs[i].state != CandidatePairState.Succeeded))
-                                //        ICE.CloseAllCandidateSockets(checkList.candidatePairs[i].localCandidate);
+                                for (int i = 0; i < checkList.candidatePairs.Count; i++)
+                                    if ((!checkList.candidatePairs[i].nominated) || (checkList.candidatePairs[i].state != CandidatePairState.Succeeded))
+                                        ICE.CloseAllCandidateSockets(checkList.candidatePairs[i].localCandidate);
 
                                 // add node with chosen remote candidate
                                 if (choosenPair != null)
@@ -2959,13 +3007,22 @@ namespace TSystems.RELOAD.Transport
                                     // get connection
                                     Socket socket = GetForwardingAndLinkManagementLayer().GetConnection(choosenPair);
 
+                                    //// TODO: change param to String attacher (look a few lines below)
                                     // Get IPAdress and Port of the attacher from attachers certificate cn
                                     System.Security.Cryptography.X509Certificates.X509Certificate2 tempcert = new System.Security.Cryptography.X509Certificates.X509Certificate2(recmsg.security_block.Certificates[0].Certificate);
                                     IPEndPoint attacherEndpoint =
                                         new IPEndPoint(IPAddress.Parse(tempcert.SubjectName.Name.ToString().Split(':')[1]),
                                                        Convert.ToInt32( tempcert.SubjectName.Name.ToString().Split(':')[2]));
+
+                                    /*
+                                    // get Subject from attachers certificate
+                                    System.Security.Cryptography.X509Certificates.X509Certificate2 tempcert = new System.Security.Cryptography.X509Certificates.X509Certificate2(recmsg.security_block.Certificates[0].Certificate);
+                                    String attacher = tempcert.Subject;
+                                     */
+
                                     // StartReloadTLSClient
-                                    GetForwardingAndLinkManagementLayer().StartReloadTLSClient(OriginatorID, socket, attacherEndpoint);
+                                    ReloadTLSClient reloadclient;
+                                    GetForwardingAndLinkManagementLayer().StartReloadTLSClient(OriginatorID, socket, attacherEndpoint, false, out reloadclient);
 
                                     // for all candidates send_params.done = true
                                     for (int i = 0; i < checkList.candidatePairs.Count; i++)
@@ -3115,6 +3172,7 @@ namespace TSystems.RELOAD.Transport
                                         //CheckList checkList = ICE.FormCheckList(localCandidates, req_answ.ice_candidates, true);
                                         CheckList checkList = ICE.FormCheckList(localCandidates, remoteIceCandidatesCopy, true);
 
+                                        Console.WriteLine("reload_attach_inbound - answer - print pairs");
                                         ICE.PrintCandidatePairList(checkList.candidatePairs);
 
                                         ICE.ScheduleChecks(checkList, m_ReloadConfig.Logger);
@@ -3208,16 +3266,594 @@ namespace TSystems.RELOAD.Transport
                                                 Socket socket = GetForwardingAndLinkManagementLayer().GetConnection(choosenPair);
 
                                                 // StartReloadTLSServer
-                                                GetForwardingAndLinkManagementLayer().StartReloadTLSServer(socket);
+                                                ReloadTLSServer reloadserver;
+                                                GetForwardingAndLinkManagementLayer().StartReloadTLSServer(socket, false, out reloadserver);
                                             } // if (any nominated)
 
 
                                         }   // if (any succeeded pair)
 
                                         // Close all sockets of all candidate pairs not nominated
-                                        //for (int i = 0; i < checkList.candidatePairs.Count; i++)
-                                        //    if ((!checkList.candidatePairs[i].nominated) || (checkList.candidatePairs[i].state != CandidatePairState.Succeeded))
-                                        //        ICE.CloseAllCandidateSockets(checkList.candidatePairs[i].localCandidate);
+                                        for (int i = 0; i < checkList.candidatePairs.Count; i++)
+                                            if ((!checkList.candidatePairs[i].nominated) || (checkList.candidatePairs[i].state != CandidatePairState.Succeeded))
+                                                ICE.CloseAllCandidateSockets(checkList.candidatePairs[i].localCandidate);
+                                    }
+
+                                    #endregion  // ICE
+
+                                }
+
+                                // existing nat candidates to free?
+                                if (localCandidates != null)
+                                {
+                                    // free all port mappings created by UPnP
+                                    foreach (IceCandidate cand in localCandidates)
+                                    {
+                                        if (cand.cand_type == CandType.tcp_nat)
+                                        {
+                                            UPnP upnp = new UPnP();
+                                            bool discovered = upnp.Discover(cand.rel_addr_port.ipaddr);
+
+                                            if (discovered)
+                                                upnp.DeletePortMapping(cand.addr_port.port, ProtocolType.Tcp);
+
+                                        }
+                                    }
+                                }
+                            }
+
+                        }
+
+
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+
+                throw;
+            }
+
+        }
+
+        public void reload_app_attach_inbound(ReloadMessage recmsg)
+        {
+            // method is very similar to reload_attach_inbound(...) (copy pasted and adjusted)
+            //
+            try
+            {
+                AppAttachReqAns req_answ = (AppAttachReqAns)recmsg.reload_message_body;
+                NodeId OriginatorID = recmsg.OriginatorID;
+
+                // Send ping to establish a physical connection
+                Arbiter.Activate(m_DispatcherQueue,
+                  new IterativeTask<Destination, PingOption>(new Destination(OriginatorID),
+                  PingOption.direct, SendPing));
+
+                if (req_answ != null && req_answ.ice_candidates != null)
+                {
+                    //if (ReloadGlobals.UseNoIce || m_ReloadConfig.IsBootstrap)
+                    //{
+                    //    Node attacher = new Node(recmsg.OriginatorID, req_answ.ice_candidates);           // markus, moved down
+                    //    bool isFinger = m_topology.routing_table.isFinger(attacher.Id);
+
+                    //    m_topology.routing_table.AddNode(attacher);
+                    //    m_topology.routing_table.SetNodeState(recmsg.OriginatorID, NodeState.attached);
+                    //}
+
+                    
+                    // incoming ATTACH REQUEST, so localnode is controlled agent
+                    if (recmsg.IsRequest())
+                    {
+                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_RELOAD,
+                                      String.Format("{0} ==> {1} TransId={2:x16}",
+                                      RELOAD_MessageCode.App_Attach_Answer.ToString().PadRight(16, ' '),
+                                      OriginatorID, recmsg.TransactionID));
+
+                        ReloadMessage sendmsg = create_app_attach_answ(
+                          new Destination(OriginatorID), recmsg.TransactionID, req_answ.application /*application-id in answer is the same as in the request*/);
+
+                        // log output
+                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("AppAttach Request: Transaction ID: {0:x}", recmsg.TransactionID));
+
+                        foreach (IceCandidate cand in ((AppAttachReqAns)sendmsg.reload_message_body).ice_candidates)
+                            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("AppAttach Request: Gathered local candidate for Answer: {0}:{1} (TransId: {2:x})", cand.addr_port.ipaddr.ToString(), cand.addr_port.port, sendmsg.TransactionID));
+
+                        foreach (IceCandidate cand in req_answ.ice_candidates)
+                            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("AppAttach Request: Received remote candidate: {0}:{1} (TransId: {2:x})", cand.addr_port.ipaddr.ToString(), cand.addr_port.port, recmsg.TransactionID));
+
+
+                        recmsg.PutViaListToDestination(sendmsg);
+                        //sendmsg.addOverlayForwardingOptions(recmsg);  //Proprietary  //--Joscha	
+                        if (m_machine is GWMachine)
+                        { //workaround in case date is stored at the gateway node responsible to route the message back into the interconnectionoverlay 
+                            if (sendmsg.forwarding_header.destination_list[0].destination_data.node_id == ((GWMachine)m_machine).GateWay.interDomainPeer.Topology.LocalNode.Id)
+                            {
+                                sendmsg.reload_message_body.RELOAD_MsgCode = RELOAD_MessageCode.Fetch_Answer;
+                                ((GWMachine)m_machine).GateWay.interDomainPeer.Transport.receive_message(sendmsg);
+                            }
+                            else
+                                send(sendmsg, m_topology.routing_table.GetNode(recmsg.LastHopNodeId));
+                        }
+                        else
+                        {
+                            send(sendmsg, m_topology.routing_table.GetNode(recmsg.LastHopNodeId));
+                        }
+
+
+
+
+                        // markus
+                        if (!ReloadGlobals.UseNoIce) // using ICE
+                        {
+                            // we only need ICE processing if localnode is a peer (in case of bootstrap we need no checks)
+                            if (!m_ReloadConfig.IsBootstrap)
+                            {
+
+                                #region ICE TODO
+                                // localnode is Peer => ICE processing (this is controlled node)
+                                AppAttachReqAns appAttachAnswer = (AppAttachReqAns)sendmsg.reload_message_body;
+
+                                // deep copy of local and remote ice candidates
+                                List<IceCandidate> localIceCandidatesCopy = new List<IceCandidate>();
+                                List<IceCandidate> remoteIceCandidatesCopy = new List<IceCandidate>();
+
+                                // local candidates
+                                foreach (IceCandidate cand in appAttachAnswer.ice_candidates)
+                                {
+                                    IceCandidate deepCopy = (IceCandidate)cand.Clone();
+                                    localIceCandidatesCopy.Add(deepCopy);
+                                }
+
+                                // remote candidates
+                                foreach (IceCandidate cand in req_answ.ice_candidates)
+                                {
+                                    IceCandidate deepCopy = (IceCandidate)cand.Clone();
+                                    remoteIceCandidatesCopy.Add(deepCopy);
+                                }
+
+                                // now form check list
+                                //CheckList checkList = ICE.FormCheckList(appAttachAnswer.ice_candidates, req_answ.ice_candidates, false);
+
+                                CheckList checkList = ICE.FormCheckList(localIceCandidatesCopy, remoteIceCandidatesCopy, false); // Controlled
+
+                                Console.WriteLine("reload_app_attach_inbound - request - print pairs");
+                                ICE.PrintCandidatePairList(checkList.candidatePairs);
+
+                                Console.WriteLine("ThreadId: {0}, send_params einfügen: checkList count {1}", Thread.CurrentThread.ManagedThreadId, checkList.candidatePairs.Count);
+                                // Add to connection queue
+                                for (int i = 0; i < checkList.candidatePairs.Count; i++)
+                                {
+                                    ReloadSendParameters send_params = new ReloadSendParameters()
+                                    {
+                                        connectionTableEntry = null,
+                                        destinationAddress = checkList.candidatePairs[i].remoteCandidate.addr_port.ipaddr,
+                                        port = checkList.candidatePairs[i].remoteCandidate.addr_port.port,
+                                        buffer = null,
+                                        frame = false,
+                                        done = new Port<bool>(),
+                                        // markus
+                                        connectionSocket = null,
+                                    };
+
+
+                                    // if key already exists => skip
+                                    if (!GetForwardingAndLinkManagementLayer().GetConnectionQueue().ContainsKey(checkList.candidatePairs[i].remoteCandidate))
+                                        GetForwardingAndLinkManagementLayer().GetConnectionQueue().Add(checkList.candidatePairs[i].remoteCandidate, send_params);
+
+                                }
+
+                                ICE.ScheduleChecks(checkList, m_ReloadConfig.Logger);
+
+                                // Wait for signals of all succeded candidate pairs. Only one of the succeded candidate pairs is nominated
+                                #region signaling
+                                // wait for nomination signal
+                                List<Thread> waitingThreads = new List<Thread>();
+
+                                foreach (CandidatePair candPair in checkList.candidatePairs)
+                                {
+                                    if (candPair.state == CandidatePairState.Succeeded)
+                                    {
+                                        switch (candPair.localCandidate.tcpType)
+                                        {
+                                            case TcpType.Active:
+                                                {
+                                                    if (candPair.localCandidate.activeConnectingSocket != null)
+                                                    {
+                                                        Thread waitThread = new Thread(() =>
+                                                        {
+                                                            candPair.nominated = ICE.WaitForSignal(candPair.localCandidate.activeConnectingSocket);
+                                                        });
+                                                        waitingThreads.Add(waitThread);
+                                                        waitThread.Start();
+                                                    }
+                                                }
+                                                break;
+
+                                            case TcpType.Passive:
+                                                {
+                                                    if (candPair.localCandidate.passiveAcceptedSocket != null)
+                                                    {
+                                                        Thread waitThread = new Thread(() =>
+                                                        {
+                                                            candPair.nominated = ICE.WaitForSignal(candPair.localCandidate.passiveAcceptedSocket);
+                                                        });
+                                                        waitingThreads.Add(waitThread);
+                                                        waitThread.Start();
+                                                    }
+                                                }
+                                                break;
+
+                                            case TcpType.SO:
+                                                {
+                                                    if (candPair.localCandidate.soAcceptedSocket != null)
+                                                    {
+                                                        Thread waitThread = new Thread(() =>
+                                                        {
+                                                            candPair.nominated = ICE.WaitForSignal(candPair.localCandidate.soAcceptedSocket);
+                                                        });
+                                                        waitingThreads.Add(waitThread);
+                                                        waitThread.Start();
+                                                    }
+
+                                                    else if (candPair.localCandidate.soConnectingSocket != null)
+                                                    {
+                                                        Thread waitThread = new Thread(() =>
+                                                        {
+                                                            candPair.nominated = ICE.WaitForSignal(candPair.localCandidate.soConnectingSocket);
+                                                        });
+                                                        waitingThreads.Add(waitThread);
+                                                        waitThread.Start();
+                                                    }
+                                                }
+                                                break;
+
+                                        }   // switch
+                                    }   // if
+                                }   // foreach
+
+                                // wait for all threads
+                                foreach (Thread waitingThread in waitingThreads)
+                                {
+                                    waitingThread.Join();
+                                }
+                                #endregion
+
+
+                                // choose pair
+                                CandidatePair choosenPair = null;
+
+                                // any nominated pair?
+                                if (checkList.candidatePairs.Any(item => item.nominated == true))
+                                {
+                                    choosenPair = checkList.candidatePairs.First(item => item.nominated == true);
+                                }
+
+                                // Close all sockets of all candidate pairs not nominated
+                                for (int i = 0; i < checkList.candidatePairs.Count; i++)
+                                    if ((!checkList.candidatePairs[i].nominated) || (checkList.candidatePairs[i].state != CandidatePairState.Succeeded))
+                                        ICE.CloseAllCandidateSockets(checkList.candidatePairs[i].localCandidate);
+
+                                // add node with chosen remote candidate
+                                if (choosenPair != null)
+                                {
+
+                                    // save connection
+                                    //GetForwardingAndLinkManagementLayer().SaveConnection(choosenPair);
+
+                                    /*******************************************************************************
+                                     * Use direct connection dependent on the application (application attribute in message) 
+                                     * 
+                                     * RFC 6940 chapter 6.5.2.1:
+                                     * The application using the connection is responsible for providing traffic of 
+                                     * sufficient frequency to keep the NAT and Firewall binding alive.  
+                                     * Applications will often send traffic every 25 seconds to ensure this.
+                                     * 
+                                     * 
+                                     * RFC 6940 chapter 5.4 Application Connectivity:
+                                     * ... RELOAD provides connectivity to applications using the AppAttach method...
+                                     * ... This new connection is separate from the peer protocol connection.  It is a 
+                                     * dedicated DTLS or TLS flow used only for the SIP (example) dialog ...
+                                     * 
+                                     * --> We do not add this connection to connection table (StartReloadTLSClient() isAppAttach = true)
+                                    /*******************************************************************************/
+
+                                    // get connection
+                                    Socket socket = GetForwardingAndLinkManagementLayer().GetConnection(choosenPair);
+
+                                    //// TODO: change param to String attacher (look a few lines below)
+                                    // Get IPAdress and Port of the attacher from attachers certificate cn
+                                    System.Security.Cryptography.X509Certificates.X509Certificate2 tempcert = new System.Security.Cryptography.X509Certificates.X509Certificate2(recmsg.security_block.Certificates[0].Certificate);
+                                    IPEndPoint attacherEndpoint =
+                                        new IPEndPoint(IPAddress.Parse(tempcert.SubjectName.Name.ToString().Split(':')[1]),
+                                                       Convert.ToInt32(tempcert.SubjectName.Name.ToString().Split(':')[2]));
+
+
+                                    /*
+                                    // get Subject from attachers certificate
+                                    System.Security.Cryptography.X509Certificates.X509Certificate2 tempcert = new System.Security.Cryptography.X509Certificates.X509Certificate2(recmsg.security_block.Certificates[0].Certificate);
+                                    String attacher = tempcert.Subject;
+                                     */
+
+                                    // StartReloadTLSClient
+                                    ReloadTLSClient reloadclient;
+                                    GetForwardingAndLinkManagementLayer().StartReloadTLSClient(OriginatorID, socket, attacherEndpoint, true, out reloadclient);
+
+                                    IUsage usage = null;
+
+
+                                    TSystems.RELOAD.Application.ApplicationConnectivity appConnection = new Application.ApplicationConnectivity(m_ReloadConfig, usage, req_answ.application);
+
+                                    //lock(ApplicationConnections)
+                                    ApplicationConnections.Post(appConnection);
+
+                                    // Dequeue ApplicationConnectivity object and start ApplicationProcedure --arc
+                                    Arbiter.Activate(m_DispatcherQueue, Arbiter.Receive<TSystems.RELOAD.Application.ApplicationConnectivity>(true, ApplicationConnections,
+                                        delegate(TSystems.RELOAD.Application.ApplicationConnectivity applicationConnection){
+                                            applicationConnection.ApplicationProcedure(reloadclient);
+                                        }));
+
+                                    // for all candidates send_params.done = true
+                                    for (int i = 0; i < checkList.candidatePairs.Count; i++)
+                                    {
+                                        ReloadSendParameters send_params;
+
+                                        GetForwardingAndLinkManagementLayer().GetConnectionQueue().TryGetValue(checkList.candidatePairs[i].remoteCandidate, out send_params);
+
+                                        if (send_params != null)
+                                        {
+                                            send_params.done.Post(true);
+
+                                            // remove from connection queue
+                                            GetForwardingAndLinkManagementLayer().GetConnectionQueue().Remove(checkList.candidatePairs[i].remoteCandidate);
+                                        }
+                                    }
+
+
+                                    List<IceCandidate> choosenRemoteCandidates = new List<IceCandidate>();
+                                    choosenRemoteCandidates.Add(choosenPair.remoteCandidate);
+
+                                    Node attacher = new Node(recmsg.OriginatorID, choosenRemoteCandidates);
+                                    bool isFinger = m_topology.routing_table.isFinger(attacher.Id);
+
+                                    m_topology.routing_table.AddNode(attacher);
+                                    m_topology.routing_table.SetNodeState(recmsg.OriginatorID, NodeState.attached);
+                                }
+
+                                // free all port mappings created by UPnP
+                                foreach (IceCandidate cand in appAttachAnswer.ice_candidates)
+                                {
+                                    if (cand.cand_type == CandType.tcp_nat)
+                                    {
+                                        UPnP upnp = new UPnP();
+                                        bool discovered = upnp.Discover(cand.rel_addr_port.ipaddr);
+
+                                        if (discovered)
+                                            upnp.DeletePortMapping(cand.addr_port.port, ProtocolType.Tcp);
+                                    }
+                                }
+
+
+                                #endregion
+
+                            }
+
+
+                            else
+                            {
+                                // localnode is bootstrap => no ICE processing
+
+                                Node attacher = new Node(recmsg.OriginatorID, req_answ.ice_candidates);
+                                bool isFinger = m_topology.routing_table.isFinger(attacher.Id);
+
+                                m_topology.routing_table.AddNode(attacher);
+                                m_topology.routing_table.SetNodeState(recmsg.OriginatorID, NodeState.attached);
+
+                            }
+
+
+                        }
+
+                        // using NO ICE
+                        else
+                        {
+                            Node attacher = new Node(recmsg.OriginatorID, req_answ.ice_candidates);
+                            bool isFinger = m_topology.routing_table.isFinger(attacher.Id);
+
+                            m_topology.routing_table.AddNode(attacher);
+                            m_topology.routing_table.SetNodeState(recmsg.OriginatorID, NodeState.attached);
+                        }
+                        // markus end
+
+
+
+                        //if (req_answ.SendUpdate)
+                        //    Arbiter.Activate(m_DispatcherQueue, new IterativeTask<Node, Node>(
+                        //      m_topology.routing_table.GetNode(OriginatorID),
+                        //      m_topology.routing_table.GetNode(recmsg.LastHopNodeId),
+                        //      SendUpdate));
+
+
+
+                    }
+
+                    // incoming APP ATTACH ANSWER, so localnode is controlling agent
+                    // and localnode must be a peer, because bootstraps dont create app attach requests and because of this cant receive an app attach answer
+                    else
+                    {
+                        // using NOICE
+                        if (ReloadGlobals.UseNoIce)     // markus: added if/else statement
+                        {
+                            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
+                              String.Format("{0} <== {1} (not handled!!)",
+                              req_answ.RELOAD_MsgCode.ToString().PadRight(16, ' '), OriginatorID));
+                        }
+
+                        // using ICE
+                        else
+                        {
+                            // get local candidates from request
+                            List<IceCandidate> localCandidates = null;
+                            bool gotLocalCandidate = m_appAttachRequestCandidates.TryGetValue(recmsg.TransactionID, out localCandidates);
+
+                            // log output
+                            m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("AppAttach Answer: Transaction ID: {0:x}", recmsg.TransactionID));
+                            foreach (IceCandidate cand in localCandidates)
+                                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("AppAttach Answer: Got local candidate: {0}:{1} (TransId: {2:x})", cand.addr_port.ipaddr.ToString(), cand.addr_port.port, recmsg.TransactionID));
+
+                            foreach (IceCandidate cand in req_answ.ice_candidates)
+                                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("AppAttach Answer: Received remote candidate: {0}:{1} (TransId: {2:x})", cand.addr_port.ipaddr.ToString(), cand.addr_port.port, recmsg.TransactionID));
+
+
+                            if (req_answ.ice_candidates != null)
+                            {
+                                // we need ice, except the answering peer is a bootstrap
+                                bool needIce = true;
+
+                                //// bootstrap responses with only one candidate
+                                //if (req_answ.ice_candidates.Count == 1)
+                                //{
+                                // is it really a bootstrap?
+                                if (req_answ.ice_candidates[0].cand_type == CandType.tcp_bootstrap)
+                                {
+                                    // attached to a bootstrap, so we have to do nothing here, no ice processing needed
+                                    needIce = false;
+                                }
+
+                                //}
+
+                                if (needIce)
+                                {
+                                    #region ICE TODO
+                                    // ICE processing (this is controlling node)
+                                    if (gotLocalCandidate)
+                                    {
+                                        // deep copy of remote ice candidates
+                                        List<IceCandidate> remoteIceCandidatesCopy = new List<IceCandidate>();
+
+                                        // remote candidates
+                                        foreach (IceCandidate cand in req_answ.ice_candidates)
+                                        {
+                                            IceCandidate deepCopy = (IceCandidate)cand.Clone();
+                                            remoteIceCandidatesCopy.Add(deepCopy);
+                                        }
+
+                                        //CheckList checkList = ICE.FormCheckList(localCandidates, req_answ.ice_candidates, true);
+
+                                        CheckList checkList = ICE.FormCheckList(localCandidates, remoteIceCandidatesCopy, true); // Controlling
+
+                                        Console.WriteLine("reload_app_attach_inbound - answer - print pairs");
+                                        ICE.PrintCandidatePairList(checkList.candidatePairs);
+
+                                        ICE.ScheduleChecks(checkList, m_ReloadConfig.Logger);
+
+                                        m_appAttachRequestCandidates.Remove(recmsg.TransactionID);
+
+                                        #region signaling
+
+                                        // any succeeded pair?
+                                        if (checkList.candidatePairs.Any(item => item.state == CandidatePairState.Succeeded))
+                                        {
+                                            // get all succeeded pairs
+                                            List<CandidatePair> succeededPairs = checkList.candidatePairs.Where(item => item.state == CandidatePairState.Succeeded).ToList();
+
+                                            // send nomination signal to peer
+                                            bool sentSuccessfull = false;
+                                            bool nominated;
+                                            int counter = 0;
+
+                                            foreach (CandidatePair pair in succeededPairs)
+                                            {
+                                                // simply nominate the first succeeded pair
+                                                if (counter == 0)
+                                                    nominated = true;
+                                                else
+                                                    nominated = false;
+
+                                                switch (pair.localCandidate.tcpType)
+                                                {
+                                                    case TcpType.Active:
+                                                        {
+                                                            if (pair.localCandidate.activeConnectingSocket != null)
+                                                            {
+                                                                sentSuccessfull = ICE.SendSignal(pair.localCandidate.activeConnectingSocket, nominated);
+                                                                pair.nominated = nominated;
+                                                            }
+                                                        }
+                                                        break;
+
+                                                    case TcpType.Passive:
+                                                        {
+                                                            if (pair.localCandidate.passiveAcceptedSocket != null)
+                                                            {
+                                                                sentSuccessfull = ICE.SendSignal(pair.localCandidate.passiveAcceptedSocket, nominated);
+                                                                pair.nominated = nominated;
+                                                            }
+                                                        }
+                                                        break;
+
+                                                    case TcpType.SO:
+                                                        {
+                                                            if (pair.localCandidate.soAcceptedSocket != null)
+                                                            {
+                                                                sentSuccessfull = ICE.SendSignal(pair.localCandidate.soAcceptedSocket, nominated);
+                                                                pair.nominated = nominated;
+                                                            }
+
+                                                            else if (pair.localCandidate.soConnectingSocket != null)
+                                                            {
+                                                                sentSuccessfull = ICE.SendSignal(pair.localCandidate.soConnectingSocket, nominated);
+                                                                pair.nominated = nominated;
+                                                            }
+                                                        }
+                                                        break;
+
+                                                }   // switch
+
+                                                counter++;
+
+                                            }   // foreach
+
+
+                                            if (sentSuccessfull)
+                                            {
+
+                                            }
+
+
+                                        #endregion  // signaling
+
+
+                                            // Start Server here, if a nominated pair exists
+                                            if (checkList.candidatePairs.Any(item => item.nominated))
+                                            { 
+                                                CandidatePair choosenPair = checkList.candidatePairs.First(item => item.nominated);
+
+                                                // save connection here too?
+                                                //GetForwardingAndLinkManagementLayer().SaveConnection(choosenPair);
+
+                                                // get connection
+                                                Socket socket = GetForwardingAndLinkManagementLayer().GetConnection(choosenPair);
+
+                                                // StartReloadTLSServer
+                                                ReloadTLSServer reloadserver;
+                                                GetForwardingAndLinkManagementLayer().StartReloadTLSServer(socket, true, out reloadserver);
+
+                                                // Dequeue ApplicationConnectivity object and start ApplicationProcedure --arc
+                                                Arbiter.Activate(m_DispatcherQueue, Arbiter.Receive<TSystems.RELOAD.Application.ApplicationConnectivity>(true, ApplicationConnections,
+                                                    delegate(TSystems.RELOAD.Application.ApplicationConnectivity applicationConnection){
+                                                        applicationConnection.ApplicationProcedure(reloadserver);
+                                                    }));
+
+                                            } // if (any nominated)
+
+
+                                        }   // if (any succeeded pair)
+
+                                        // Close all sockets of all candidate pairs not nominated
+                                        for (int i = 0; i < checkList.candidatePairs.Count; i++)
+                                            if ((!checkList.candidatePairs[i].nominated) || (checkList.candidatePairs[i].state != CandidatePairState.Succeeded))
+                                                ICE.CloseAllCandidateSockets(checkList.candidatePairs[i].localCandidate);
                                     }
 
                                     #endregion  // ICE
@@ -3255,11 +3891,13 @@ namespace TSystems.RELOAD.Transport
 
                 throw;
             }
+            //
+            
 
-        }
 
-        public void reload_app_attach_inbound(ReloadMessage recmsg)
-        {
+            // Old content, before ICE --arc
+            //
+            /*
             AppAttachReqAns req_answ = (AppAttachReqAns)recmsg.reload_message_body;
             NodeId OriginatorID = recmsg.OriginatorID;
             Node Originator = new Node(recmsg.OriginatorID, req_answ.ice_candidates);
@@ -3327,6 +3965,7 @@ namespace TSystems.RELOAD.Transport
                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR, String.Format("{0} <== {1} (not handled!!)", req_answ.RELOAD_MsgCode.ToString().PadRight(16, ' '), OriginatorID));
                 }
             }
+            */
         }
 
         private void reload_join_inbound(ReloadMessage recmsg)
@@ -3641,7 +4280,7 @@ namespace TSystems.RELOAD.Transport
 
                 // add certificates to fetch answer
                 sendmsg.security_block.Certificates.AddRange(certs);
-
+    
                 recmsg.PutViaListToDestination(sendmsg);
                 //sendmsg.addOverlayForwardingOptions(recmsg);  //Proprietary  //--Joscha	
 
@@ -3894,6 +4533,13 @@ namespace TSystems.RELOAD.Transport
                                 // forward attach answer
                                 reload_attach_inbound(reloadMsg);
                             }
+                            if (reloadMsg.reload_message_body.RELOAD_MsgCode == RELOAD_MessageCode.App_Attach_Answer)
+                            {
+                                m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("AppAttach Answer Transaction ID: {0:x}", reloadMsg.TransactionID));
+
+                                // forward app attach answer
+                                reload_app_attach_inbound(reloadMsg);
+                            }
                         }
                     }
                 }
@@ -3916,9 +4562,9 @@ namespace TSystems.RELOAD.Transport
             {
                 try
                 {
-                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("Add candidates to Dictionary: Transaction ID: {0:x}", trans_id));
+                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("Attach Req. Add candidates to Dictionary: Transaction ID: {0:x}", trans_id));
                     foreach (IceCandidate cand in ((AttachReqAns)reload_content).ice_candidates)
-                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("Add candidate: {0}:{1}", cand.addr_port.ipaddr.ToString(), cand.addr_port.port));
+                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("Attach Req. Add candidate: {0}:{1}", cand.addr_port.ipaddr.ToString(), cand.addr_port.port));
 
                     if (!m_attachRequestCandidates.ContainsKey(trans_id)) // because retry uses same transid
                         m_attachRequestCandidates.Add(trans_id, ((AttachReqAns)reload_content).ice_candidates);
@@ -3930,6 +4576,23 @@ namespace TSystems.RELOAD.Transport
                 }
             }
             // markus end
+            if (reload_content.RELOAD_MsgCode == RELOAD_MessageCode.App_Attach_Request)
+            {
+                try
+                {
+                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("AppAttach Req. Add candidates to Dictionary: Transaction ID: {0:x}", trans_id));
+                    foreach (IceCandidate cand in ((AppAttachReqAns)reload_content).ice_candidates)
+                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("AppAttach Req. Add candidate: {0}:{1}", cand.addr_port.ipaddr.ToString(), cand.addr_port.port));
+
+                    if (!m_appAttachRequestCandidates.ContainsKey(trans_id)) // because retry uses same transid
+                        m_appAttachRequestCandidates.Add(trans_id, ((AppAttachReqAns)reload_content).ice_candidates);
+                }
+                catch (Exception)
+                {
+
+                    throw;
+                }
+            }
 
             return new ReloadMessage(m_ReloadConfig,
               m_topology.LocalNode.Id, destination, trans_id, reload_content);
@@ -4001,9 +4664,36 @@ namespace TSystems.RELOAD.Transport
 
         }
 
-        public ReloadMessage create_app_attach_req(Destination destination)
+        public ReloadMessage create_app_attach_req(Destination destination, UInt16 application)
         {
-            return create_reload_message(destination, ++m_ReloadConfig.TransactionID, new AppAttachReqAns(m_topology.LocalNode, true));
+            //return create_reload_message(destination, ++m_ReloadConfig.TransactionID, new AppAttachReqAns(m_topology.LocalNode, true));       // commented out
+
+
+
+            if (ReloadGlobals.UseNoIce)
+                return create_reload_message(destination, ++m_ReloadConfig.TransactionID, new AppAttachReqAns(m_topology.LocalNode, true));    // --old call before ICE implementation
+            else
+            {
+                bool gatherActiveHostOnly = false;
+
+                if (destination == new Destination(new ResourceId(m_topology.LocalNode.Id + (byte)1)))
+                    gatherActiveHostOnly = true;
+
+                else
+                {
+                    foreach (BootstrapServer bss in m_machine.BootstrapServer)
+                    {
+                        var test = new Destination(new ResourceId(bss.NodeId));
+                        if (destination == new Destination(new ResourceId(bss.NodeId + (byte)1)))
+                        {
+                            gatherActiveHostOnly = true;
+                            break;
+                        }
+                    }
+                }
+
+                return create_reload_message(destination, ++m_ReloadConfig.TransactionID, new AppAttachReqAns(m_topology.LocalNode, true, m_ReloadConfig.IsBootstrap, gatherActiveHostOnly, application));
+            }
         }
 
         public ReloadMessage create_attach_answ(Destination destination, UInt64 trans_id)
@@ -4018,9 +4708,17 @@ namespace TSystems.RELOAD.Transport
                 new AttachReqAns(m_topology.LocalNode, false, false, m_ReloadConfig.IsBootstrap, false));     // bootstrap doesnt send attach requests => attach answer never goes to bootstrap => 4th parameter false
         }
 
-        public ReloadMessage create_app_attach_answ(Destination destination, UInt64 trans_id)
+        public ReloadMessage create_app_attach_answ(Destination destination, UInt64 trans_id, UInt16 application)
         {
-            return create_reload_message(destination, trans_id, new AppAttachReqAns(m_topology.LocalNode, false));
+            //return create_reload_message(destination, trans_id, new AppAttachReqAns(m_topology.LocalNode, false));        // commented out
+
+
+            if (ReloadGlobals.UseNoIce)
+                return create_reload_message(destination, trans_id, new AppAttachReqAns(m_topology.LocalNode, false)); // --old call before ICE implementation
+            else
+            {
+                return create_reload_message(destination, trans_id, new AppAttachReqAns(m_topology.LocalNode, false, m_ReloadConfig.IsBootstrap, false, application));
+            }
         }
 
         public ReloadMessage create_join_req(Destination destination)

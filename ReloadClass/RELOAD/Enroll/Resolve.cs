@@ -519,7 +519,7 @@ namespace TSystems.RELOAD.Enroll {
 
           /* private certificate configuration */
 
-          String CN = "reload:" + ReloadGlobals.IPAddressFromHost(m_ReloadConfig, ReloadGlobals.HostName).ToString() + ":" + m_ReloadConfig.ListenPort;
+          String CN = "reload:" + ReloadGlobals.IPAddressFromHost(m_ReloadConfig, ReloadGlobals.HostName).ToString() +":" + m_ReloadConfig.ListenPort;
           //String CN = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.CN;
           String Country = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.Country;
           String Locality = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.Locality;

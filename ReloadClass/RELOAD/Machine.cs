@@ -60,6 +60,7 @@ namespace TSystems.RELOAD {
   /// RELOAD main worker thread, major state machine is implemented here
   /// </summary>
   public class Machine {
+
     #region Properties
 
     private ReloadConfig m_ReloadConfig = null;
@@ -501,6 +502,7 @@ namespace TSystems.RELOAD {
                 Arbiter.Activate(ReloadConfig.DispatcherQueue,
                     Arbiter.Receive(true, m_transport.AppAttachDone, ice => {
                       if (AppAttachCompleted != null) AppAttachCompleted(ice);
+
                     }));
               }
               else if (s == "Leave") {
@@ -945,8 +947,8 @@ Predecessor cache:";
 
       //m_UsageManager.RegisterUsage(new Haw.DrisCo.ShaReUsage(m_UsageManager));
 	    m_UsageManager.RegisterUsage(new RedirServiceProvider(m_UsageManager));
-        m_UsageManager.RegisterUsage(new CertificateStore(true));
-        m_UsageManager.RegisterUsage(new CertificateStore(false));
+        m_UsageManager.RegisterUsage(new CertificateStore(true, m_UsageManager));
+        m_UsageManager.RegisterUsage(new CertificateStore(false, m_UsageManager));
     }
 
     private void BootStrapConfig() {

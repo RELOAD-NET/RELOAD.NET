@@ -34,6 +34,7 @@ using TSystems.RELOAD.Storage;
 using TSystems.RELOAD.Enroll;
 
 using Conv = System.Net.IPAddress;
+using TSystems.RELOAD.Application;
 
 namespace TSystems.RELOAD.Usage {
   #region Usages
@@ -52,8 +53,6 @@ namespace TSystems.RELOAD.Usage {
         IMAGE_STORE
   }
 
-
-
   public class UsageManager {
 
     #region Usage Manager
@@ -66,7 +65,7 @@ namespace TSystems.RELOAD.Usage {
 
     public ReloadConfig m_ReloadConfig;
 
-    private ArrayManager m_ArrayManager;   
+    private ArrayManager m_ArrayManager;
 
     public ArrayManager MyArrayManager {
       get { return m_ArrayManager; }
@@ -88,7 +87,7 @@ namespace TSystems.RELOAD.Usage {
       m_ReloadConfig = machine.ReloadConfig;
       m_DispatcherQueue = machine.ReloadConfig.DispatcherQueue;
       usages = new Dictionary<Usage_Code_Point, IUsage>();
-      m_ArrayManager = new ArrayManager();
+      m_ArrayManager = new ArrayManager(); 
     }
 
     /// <summary>
@@ -269,6 +268,7 @@ namespace TSystems.RELOAD.Usage {
     /// </summary>
     /// <returns>An UInt32</returns>
     UInt32 Length { get; }
+
 
     /// <summary>
     /// Instanciates a new Usage object
@@ -540,7 +540,7 @@ namespace TSystems.RELOAD.Usage {
           if (remoteCoords == myManager.m_ReloadConfig.MyCoordinate) {
             myManager.m_ReloadConfig.MyFocus = focusId;
             Arbiter.Activate(myManager.m_DispatcherQueue,
-                new IterativeTask<Destination>(new Destination(focusId),
+                new IterativeTask<Destination, UInt16>(new Destination(focusId), (UInt16)Application_ID.INVALID /*todo: create application-id*/,
                     transport.AppAttachProcedure));
           }
           else {
@@ -1307,9 +1307,11 @@ namespace TSystems.RELOAD.Usage {
   public class CertificateStore : IUsage {
 
     Usage_Code_Point codePoint;
+    UsageManager myManager;
     string username;
     NodeId localNodeId;
-    string certificate;
+    //string certificate;
+    byte[] certificate;
     private string resourceName;
     bool byNode;
     UInt32 length;
@@ -1317,10 +1319,11 @@ namespace TSystems.RELOAD.Usage {
    /// <summary>
     /// This contructor should be taken if you want to create a RedirServiceProvider from wire.
     /// </summary>        
-    public CertificateStore(bool bnode)
+    public CertificateStore(bool bnode, UsageManager manager)
     {
       codePoint = bnode ? Usage_Code_Point.CERTIFICATE_STORE_BY_NODE : Usage_Code_Point.CERTIFICATE_STORE_BY_USER;
       byNode = bnode;
+      myManager = manager;
     }
 
     public Usage_Code_Point CodePoint {
@@ -1338,7 +1341,7 @@ namespace TSystems.RELOAD.Usage {
     /// <param name="arguments">args[0]= username, args[1] = node-id, args[2]=certificate as string</param>
     /// <returns></returns>
     public IUsage Create(int? type, params object[] arguments) {
-      if (arguments.Count() <= 3)
+      if (arguments.Count() < 3)
         throw new ArgumentException("Not enough arguments! Need 0=username, 1=node-id, 2=certificate");
       if (arguments[0] == null || arguments[1] == null || arguments[2] == null)
         throw new ArgumentNullException("Not enough arguments! Any of the the arguments is null!");
@@ -1347,41 +1350,81 @@ namespace TSystems.RELOAD.Usage {
       length += (UInt32)username.Length;
       localNodeId = new NodeId(Encoding.ASCII.GetBytes((string)arguments[1]));
       length += (UInt32)localNodeId.Digits;
-      certificate = (string)arguments[2];
+      //certificate = (string)arguments[2];
+      certificate = (byte[])arguments[2];
+      //length += (UInt32)certificate.Length;
       length += (UInt32)certificate.Length;
 
       return this;
     }
 
-    public uint dump(BinaryWriter write) {
-      throw new NotImplementedException("dump");
+    public uint dump(BinaryWriter writer) { 
+      //throw new NotImplementedException("dump");
+        // --arc
+        var ASCII = Encoding.ASCII;
+        const ulong MAX_VALUE = 0xFFFFFFFF;
+        ReloadGlobals.WriteOpaqueValue(writer, ASCII.GetBytes(username), MAX_VALUE); // username
+        ReloadGlobals.WriteOpaqueValue(writer, localNodeId.Data, MAX_VALUE); // localNodeId
+        ReloadGlobals.WriteOpaqueValue(writer, certificate, MAX_VALUE); // certificate
+
+        return Length;
     }
 
     public IUsage FromReader(ReloadMessage rm, BinaryReader reader, long usage_size)
     {
-      try
-      {
-        long posBefore = reader.BaseStream.Position;
-        var type = (CertificateType)reader.ReadByte();
-        var unknown = reader.ReadByte();
-        UInt16 len = (UInt16)IPAddress.NetworkToHostOrder(reader.ReadInt16());
-        //TElX509Certificate cert = new TElX509Certificate();
-        //Byte[] bcert = reader.ReadBytes(len);
-        //cert.LoadFromBuffer(bcert);
-        long posAfter = reader.BaseStream.Position;
+        // --arc
+        bool bnode = codePoint == Usage_Code_Point.CERTIFICATE_STORE_BY_NODE;
+        CertificateStore result = new CertificateStore(bnode, myManager);
+        var ASCII = Encoding.ASCII;
+        var bytesCount = 0;
 
-        usage_size = usage_size - (posAfter - posBefore);
-        length = (uint)(posAfter - posBefore); //TK not sure if this is correct
-      }
-      catch (Exception ex)
-      {
-        throw ex;
-      }
-      return this;
+        try
+        {
+            bytesCount = IPAddress.NetworkToHostOrder(reader.ReadInt32());
+            result.username = ASCII.GetString(reader.ReadBytes(bytesCount), 0, bytesCount); // username
+
+            bytesCount = IPAddress.NetworkToHostOrder(reader.ReadInt32());
+            result.localNodeId = new NodeId(reader.ReadBytes(bytesCount)); // localNodeId
+
+            bytesCount = IPAddress.NetworkToHostOrder(reader.ReadInt32());
+            result.certificate = reader.ReadBytes(bytesCount); // certificate
+        }
+        catch (Exception e)
+        {
+            myManager.m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_ERROR,
+                String.Format("CertificateStore Usage FromReader(): {0}", e.Message));
+        }
+
+        return result;
+
+      //try
+      //{
+      //  long posBefore = reader.BaseStream.Position;
+      //  var type = (CertificateType)reader.ReadByte();
+      //  var unknown = reader.ReadByte();
+      //  UInt16 len = (UInt16)IPAddress.NetworkToHostOrder(reader.ReadInt16());
+      //  //TElX509Certificate cert = new TElX509Certificate();
+      //  //Byte[] bcert = reader.ReadBytes(len);
+      //  //cert.LoadFromBuffer(bcert);
+      //  long posAfter = reader.BaseStream.Position;
+
+      //  usage_size = usage_size - (posAfter - posBefore);
+      //  length = (uint)(posAfter - posBefore); //TK not sure if this is correct
+      //}
+      //catch (Exception ex)
+      //{
+      //  throw ex;
+      //}
+      //return this;
     }
 
     public StoredDataValue Encapsulate(bool exists) {
-      throw new NotImplementedException("Encapsulate");
+      //throw new NotImplementedException("Encapsulate");
+
+        // --arc
+        // TODO: how to determine index for array value here? For now always choose index 0
+        uint index = 0;
+        return new StoredDataValue(index, this, exists); 
     }
 
     public void AppProcedure(MessageTransport transport,

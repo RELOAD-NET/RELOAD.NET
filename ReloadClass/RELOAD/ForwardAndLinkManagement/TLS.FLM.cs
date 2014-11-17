@@ -47,18 +47,25 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
         // markus
         private Dictionary<IpAddressPort, Socket> m_connectionsToRemotePeer = new Dictionary<IpAddressPort, Socket>();
 
-        public void StartReloadTLSServer(Socket socket)
+        public void StartReloadTLSServer(Socket socket, bool isForAppAttach, out ReloadTLSServer reloadserver)
         {
             // simply call InitReloadTLSServer
-            link.InitReloadTLSServer(socket);
+            ReloadTLSServer server;
+            link.InitReloadTLSServer(socket, isForAppAttach, out server);
+           
+            reloadserver = server; // out param
         }
 
-        public void StartReloadTLSClient(NodeId nodeid, Socket socket, IPEndPoint attacherEndpoint)
+
+        public void StartReloadTLSClient(NodeId nodeid, Socket socket, IPEndPoint attacherEndpoint, bool isForAppAttach, out ReloadTLSClient reloadclient) //// TODO: change the IPEndpoint param to String attacher (Subject name from cert)
+        //public void StartReloadTLSClient(NodeId nodeid, Socket socket, String attacher, bool isForAppAttach, out ReloadTLSClient reloadclient)
         {
             // simply call InitReloadTLSClient
             ReloadSendParameters send_params = new ReloadSendParameters();
-            send_params.destinationAddress = attacherEndpoint.Address;
-            link.InitReloadTLSClient(send_params, socket, attacherEndpoint);
+            send_params.destinationAddress = attacherEndpoint.Address; //// TODO: this info is also available in socket, don't need attacherEndpoint param for this
+            //send_params.destinationAddress = ((IPEndPoint)socket.RemoteEndPoint).Address;
+            ReloadTLSClient client;
+            link.InitReloadTLSClient(send_params, socket, attacherEndpoint, isForAppAttach, out client);
 
             if (send_params.connectionTableEntry != null)
             {
@@ -66,6 +73,8 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 if (send_params.connectionTableEntry.NodeID != null)        //TODO: correct?
                     nodeid = send_params.connectionTableEntry.NodeID;
             }
+
+            reloadclient = client; // out param
         }
 
         public void SaveConnection(CandidatePair choosenPair)
@@ -287,6 +296,13 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                     if (connectionTableEntry != null)
                         m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_SOCKET, String.Format("FLM: Found open connection for target node id {0}", node.Id));
                 }
+
+                // No connection is established in linkSend if send_params.connectionTableEntry != null => In case of AppAttach set it null // TODO: correct? --arc
+                if (ReloadGlobals.UseNoIce && reloadMessage.reload_message_body.RELOAD_MsgCode == RELOAD_MessageCode.App_Attach_Request || ReloadGlobals.UseNoIce && reloadMessage.reload_message_body.RELOAD_MsgCode == RELOAD_MessageCode.App_Attach_Answer)
+                {
+                    connectionTableEntry = null; // => new socket connection is created in linkSend
+                }
+
                 if (connectionTableEntry == null)
                 {
                     // connectionTableEntry == null   => no connection to remote peer

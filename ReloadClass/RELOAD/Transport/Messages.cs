@@ -3148,6 +3148,8 @@ namespace TSystems.RELOAD.Transport
         private Byte[] ufrag = null;    /* 0 - 255 Länge*/
         /* The The ICE password */
         private Byte[] password = null; /* 0 - 255 Länge*/
+        /* application attribute, which indicates what protocol is to be run over the connection */
+        public UInt16 application;
         /* An active/passive/actpass attribute from RFC 4145 [RFC4145]. */
         /* 'active': The endpoint will initiate an outgoing connection. 
          * 'passive': The endpoint will accept an incoming connection. 
@@ -3193,10 +3195,74 @@ namespace TSystems.RELOAD.Transport
             ice_candidates = chordnode.IceCandidates;
         }
 
+
+        public AppAttachReqAns(Node chordnode, bool req, bool isBootstrap, bool gatherActiveHostOnly, UInt16 application)
+        {
+            // method is very similar to AttachReqAns(...) (copy pasted and adjusted)
+            //
+            RELOAD_MsgCode = req ? RELOAD_MessageCode.App_Attach_Request : RELOAD_MessageCode.App_Attach_Answer;
+
+            // ufrag and password
+            ufrag = new byte[255];
+            password = new byte[255];
+
+            // application attribute --arc
+            this.application = application;
+
+            // RFC 5245, ICE, Section 15.4:
+            // The ice-ufrag and ice-pwd attributes MUST be chosen randomly at the beginning of a session
+            Random random = new Random();
+            random.NextBytes(ufrag);
+            random.NextBytes(password);
+
+
+            // NO_ICE
+            if (ReloadGlobals.UseNoIce)
+            {
+                //ice_candidates = chordnode.IceCandidates;
+                ice_candidates = chordnode.NoIceCandidates; // there is only one entry in NoIceCandidates
+            }
+
+            // ICE
+            else
+            {
+                if (isBootstrap)
+                {
+                    IceCandidate bootstrapCandidate = ICE.CreateBootstrapCandidate(chordnode.NoIceCandidates[0].addr_port.ipaddr, chordnode.NoIceCandidates[0].addr_port.port);
+
+                    chordnode.IceCandidates = new List<IceCandidate>();
+                    chordnode.IceCandidates.Add(bootstrapCandidate);
+
+                    ice_candidates = chordnode.IceCandidates;
+                }
+
+                else
+                {
+                    List<IceCandidate> iceCandidates = null;
+
+                    if (!gatherActiveHostOnly)
+                        // gathering candidates and overwrite localnode candidates
+                        iceCandidates = ICE.GatherCandidates();
+                    else
+                        iceCandidates = ICE.GatherActiveCandidatesForBootstrap();
+
+                    iceCandidates = ICE.PrioritizeCandidates(iceCandidates);
+                    chordnode.IceCandidates = ice_candidates = iceCandidates;                       // chordnode is localnode !
+
+                    //foreach (IceCandidate candidate in iceCandidates) // keep the current candidates and add the new candidates or overwrite?
+                    //    chordnode.IceCandidates.Add(candidate);
+                    //ice_candidates = chordnode.IceCandidates;
+                }
+
+            }
+            //
+        }
+
         public AppAttachReqAns()
         {
             ice_candidates = new List<IceCandidate>();
         }
+
 
         public override UInt32 Dump(BinaryWriter writer)
         {
@@ -3216,14 +3282,22 @@ namespace TSystems.RELOAD.Transport
                 /* The The ICE password, we set it to zero length in NO-ICE */
                 length = length + ReloadGlobals.WriteOpaqueValue(writer, password, 0xFF);
 
+                /*application attribute*/
+                writer.Write((UInt16)application);
+                length += 2;
+
                 /* An active/passive/actpass attribute from RFC 4145 [RFC4145]. */
                 length = length + ReloadGlobals.WriteOpaqueValue(writer, role, 0xFF);
 
 
+                UInt32 ice_length = 0;
+                long ice_length_pos = writer.BaseStream.Position;
+                writer.Write(IPAddress.HostToNetworkOrder((short)ice_length));
+
                 foreach (IceCandidate candidate in ice_candidates)
                 {
                     writer.Write((byte)candidate.addr_port.type);
-                    ++length;
+                    ++ice_length;
 
                     switch (candidate.addr_port.type)
                     {
@@ -3233,24 +3307,30 @@ namespace TSystems.RELOAD.Transport
                             /* IPv6 address is of type uint128   */
                             /* length of IpAddressPort structure */
                             writer.Write((byte)(candidate.addr_port.ipaddr.GetAddressBytes().Length + sizeof(ushort)));
+                            ++ice_length;
                             writer.Write(candidate.addr_port.ipaddr.GetAddressBytes());
-                            length = length + (UInt32)candidate.addr_port.ipaddr.GetAddressBytes().Length + sizeof(ushort);
+                            ice_length += (UInt32)candidate.addr_port.ipaddr.GetAddressBytes().Length;
                             break;
                     }
 
                     /* port is of type uint16 */
                     writer.Write(IPAddress.HostToNetworkOrder((short)candidate.addr_port.port));
+                    ice_length += 2;
+
                     /* write overlay link which is a single byte    */
                     writer.Write((byte)candidate.overlay_link);
+                    ++ice_length;
 
                     /* corresponds to the foundation production. */
-                    length = length + ReloadGlobals.WriteOpaqueValue(writer, candidate.foundation, 0xFF);
+                    ice_length += ReloadGlobals.WriteOpaqueValue(writer, candidate.foundation, 0xFF);
 
                     /* write priority which is of type uint32 */
                     writer.Write(IPAddress.HostToNetworkOrder((int)candidate.priority));
+                    ice_length += 4;
 
                     /* write candidate type */
                     writer.Write((byte)candidate.cand_type);
+                    ++ice_length;
 
                     switch (candidate.cand_type)
                     {
@@ -3258,6 +3338,7 @@ namespace TSystems.RELOAD.Transport
                             /* do nothing */
                             break;
                         case CandType.tcp_prflx:
+                        case CandType.tcp_nat:          // new
                         case CandType.tcp_relay:
                         case CandType.tcp_srflx:
                             switch (candidate.rel_addr_port.type)
@@ -3267,24 +3348,78 @@ namespace TSystems.RELOAD.Transport
                                     /* IPv4 address is of type uint32    */
                                     /* IPv6 address is of type uint128   */
                                     /* length of IpAddressPort structure */
-                                    writer.Write((byte)(candidate.rel_addr_port.ipaddr.GetAddressBytes().Length + sizeof(ushort)));
+
+                                    writer.Write((byte)candidate.rel_addr_port.type);   // markus
+                                    ++ice_length;                                       // markus
+
+                                    writer.Write((byte)(candidate.rel_addr_port.ipaddr.GetAddressBytes().Length + sizeof(ushort))); // for rel_length
+                                    ++ice_length;
                                     writer.Write(candidate.rel_addr_port.ipaddr.GetAddressBytes());
-                                    length = length + (UInt32)candidate.rel_addr_port.ipaddr.GetAddressBytes().Length + sizeof(ushort);
+                                    ice_length += (UInt32)candidate.rel_addr_port.ipaddr.GetAddressBytes().Length;
                                     break;
                             }
+
+                            writer.Write(IPAddress.HostToNetworkOrder((short)candidate.rel_addr_port.port));    // markus
+                            ice_length += 2;                                                                    // markus
+
                             break;
                     }
 
-                    length = length + 8;
+                    /*
+                    long SizeOfIceExtensions = 0;
+                    // only one ice extension (tcptype)
+                    writer.Write(IPAddress.HostToNetworkOrder((short)SizeOfIceExtensions));
+                    ice_length += 2;
+                    */
+
+
+                    #region markus
+                    // all new attributes for TCP ICE
+
+                    // type preference
+                    writer.Write(IPAddress.HostToNetworkOrder((int)candidate.typePreference));
+                    ice_length += 4;
+
+                    // local preference
+                    writer.Write(IPAddress.HostToNetworkOrder((int)candidate.localPreference));
+                    ice_length += 4;
+
+                    // direction preference
+                    writer.Write(IPAddress.HostToNetworkOrder((int)candidate.directionPreference));
+                    ice_length += 4;
+
+                    // other preference
+                    writer.Write(IPAddress.HostToNetworkOrder((int)candidate.otherPreference));
+                    ice_length += 4;
+
+                    // tcp type
+                    writer.Write((byte)candidate.tcpType);
+                    ++ice_length;
+
+
+                    #endregion
+
+
+                    length += ice_length;
                 }
+
+                /* code length of ice candidates */
+                long ice_end = writer.BaseStream.Position;
+                writer.BaseStream.Seek(ice_length_pos, SeekOrigin.Begin);
+                writer.Write(IPAddress.HostToNetworkOrder((short)ice_length));
+                writer.BaseStream.Seek(ice_end, SeekOrigin.Begin);
+
+                /* write send update option */
+                //writer.Write((byte)(fSendUpdate ? 1 : 0));
+                //++length;
             }
             return length;
         }
 
+
         public override RELOAD_MessageBody FromReader(ReloadMessage rm, BinaryReader reader, long reload_msg_size)
         {
-
-            /* try to read the packet as a AppAttachReqAns packet */
+            /* try to read the packet as a AttachReqAns packet */
             try
             {
                 byte length;
@@ -3296,28 +3431,36 @@ namespace TSystems.RELOAD.Transport
                 length = reader.ReadByte();
                 if (length != 0)
                     ufrag = reader.ReadBytes(length);
-                reload_msg_size = reload_msg_size - (length + 1);
+                reload_msg_size -= (length + 1);
 
                 /* The The ICE password, we set it to zero length in NO-ICE */
                 length = reader.ReadByte();
                 if (length != 0)
                     password = reader.ReadBytes(length);
-                reload_msg_size = reload_msg_size - (length + 1);
+                reload_msg_size -= (length + 1);
+
+                /* application attribute */
+                application = (UInt16)reader.ReadInt16();
+                reload_msg_size -= 2;
 
                 /* An active/passive/actpass attribute from RFC 4145 [RFC4145]. */
                 length = reader.ReadByte();
                 if (length != 0)
                     role = reader.ReadBytes(length);
-                reload_msg_size = reload_msg_size - (length + 1);
+                reload_msg_size -= (length + 1);
 
-                while (reload_msg_size > 0)
+                long ice_length = (UInt16)IPAddress.NetworkToHostOrder(reader.ReadInt16());
+
+                reload_msg_size -= (ice_length + 2);
+
+                while (ice_length > 1) //size of bool which follows
                 {
                     AddressType type = (AddressType)reader.ReadByte();
+                    --ice_length;
                     IPAddress ip;
 
                     length = reader.ReadByte();
-                    --reload_msg_size;
-
+                    --ice_length;
 
                     switch (type)
                     {
@@ -3325,30 +3468,32 @@ namespace TSystems.RELOAD.Transport
                             if (length != 6)
                                 return null;
                             ip = new IPAddress(reader.ReadBytes(4));
-                            reload_msg_size = reload_msg_size - length;
+                            ice_length -= length;
                             break;
                         case AddressType.IPv6_Address:
                             if (length != 18)
                                 return null;
                             ip = new IPAddress(reader.ReadBytes(16));
-                            reload_msg_size = reload_msg_size - length;
+                            ice_length -= length;
                             break;
                         default:
-                            throw new System.Exception(String.Format("Invalid address type {0} in AppAttachReqAns!", type));
+                            throw new System.Exception(String.Format("Invalid address type {0} in AttachReqAns!", type));
                     }
 
                     UInt16 port = (ushort)IPAddress.NetworkToHostOrder(reader.ReadInt16());
+                    ice_length -= 2;
                     Overlay_Link overlay_link = (Overlay_Link)reader.ReadByte();
+                    --ice_length;
                     IceCandidate candidate = new IceCandidate(new IpAddressPort(type, ip, port), overlay_link);
 
                     int fond_length = reader.ReadByte();
                     candidate.foundation = reader.ReadBytes(fond_length);
-                    reload_msg_size = reload_msg_size - fond_length - 1;
+                    ice_length -= (fond_length - 1);
 
                     candidate.priority = (UInt32)IPAddress.NetworkToHostOrder(reader.ReadInt32());
+                    ice_length -= 4;
                     candidate.cand_type = (CandType)reader.ReadByte();
-
-                    reload_msg_size = reload_msg_size - 8;
+                    --ice_length;
 
                     switch (candidate.cand_type)
                     {
@@ -3356,11 +3501,13 @@ namespace TSystems.RELOAD.Transport
                             /* do nothing */
                             break;
                         case CandType.tcp_prflx:
+                        case CandType.tcp_nat:      // new
                         case CandType.tcp_relay:
                         case CandType.tcp_srflx:
                             type = (AddressType)reader.ReadByte();
                             byte rel_length = reader.ReadByte();
-                            --reload_msg_size;
+                            //--ice_length;
+                            ice_length -= 2;    // markus
 
                             switch (type)
                             {
@@ -3368,25 +3515,74 @@ namespace TSystems.RELOAD.Transport
                                     if (rel_length != 6)
                                         return null;
                                     ip = new IPAddress(reader.ReadBytes(4));
-                                    reload_msg_size = reload_msg_size - length;
+                                    ice_length -= rel_length;
                                     break;
                                 case AddressType.IPv6_Address:
                                     if (rel_length != 18)
                                         return null;
                                     ip = new IPAddress(reader.ReadBytes(16));
-                                    reload_msg_size = reload_msg_size - rel_length;
+                                    ice_length -= rel_length;
                                     break;
                                 default:
-                                    throw new System.Exception(String.Format("Invalid rel address type {0} in AppAttachReqAns!", type));
+                                    throw new System.Exception(String.Format("Invalid rel address type {0} in AttachReqAns!", type));
                             }
 
                             port = (ushort)IPAddress.NetworkToHostOrder(reader.ReadInt16());
+                            ice_length -= 2;
 
                             candidate.rel_addr_port = new IpAddressPort(type, ip, port);
                             break;
                     }
+
+                    /*
+                    // now read ice extension length
+                    long ice_extension_size = (UInt16)IPAddress.NetworkToHostOrder(reader.ReadInt16());
+                    if (ice_extension_size != 0)
+                    {
+                        //skip ice extension length
+                        reader.ReadBytes((int)ice_extension_size);
+                    }
+                    ice_length -= (ice_extension_size + 2);
+                    */
+
+
+                    #region markus
+                    // all new attributes for TCP ICE
+
+                    // type preference
+                    candidate.typePreference = (UInt32)IPAddress.NetworkToHostOrder(reader.ReadInt32());
+                    ice_length -= 4;
+
+                    // local preference
+                    candidate.localPreference = (UInt32)IPAddress.NetworkToHostOrder(reader.ReadInt32());
+                    ice_length -= 4;
+
+                    // direction preference
+                    candidate.directionPreference = (UInt32)IPAddress.NetworkToHostOrder(reader.ReadInt32());
+                    ice_length -= 4;
+
+                    // other preference
+                    candidate.otherPreference = (UInt32)IPAddress.NetworkToHostOrder(reader.ReadInt32());
+                    ice_length -= 4;
+
+                    // tcp type
+                    candidate.tcpType = (TcpType)reader.ReadByte();
+                    --ice_length;
+
+                    // ice extension
+                    IceExtension iceExtension = new IceExtension();
+                    iceExtension.name = Encoding.UTF8.GetBytes("tcptype");
+                    iceExtension.value = Encoding.UTF8.GetBytes(candidate.tcpType.ToString());
+                    candidate.extension_list.Add(iceExtension);
+
+                    #endregion
+
+
                     ice_candidates.Add(candidate);
                 }
+
+                //fSendUpdate = (bool)(reader.ReadByte() == 0 ? false : true);
+                //--reload_msg_size;
             }
             catch (Exception ex)
             {

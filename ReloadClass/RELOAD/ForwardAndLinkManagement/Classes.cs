@@ -59,7 +59,7 @@ namespace TSystems.RELOAD
         public bool Outbound;
     }
 
-    interface IAssociation
+    public interface IAssociation // public for access in Machine.ApplicationLayerCommunication() method
     {
         /* Socket associations */
         Socket AssociatedSocket { get; set; }
@@ -143,7 +143,8 @@ namespace TSystems.RELOAD
     /// <summary>
     /// The serving part of the "servent"
     /// </summary>
-    internal class ReloadTLSServer : IAssociation
+    // internal class ReloadTLSServer : IAssociation
+    public class ReloadTLSServer : IAssociation // changed class to public, to allow as out param for StartReloadTLSServer() method
     {
         private Socket associatedSocket;
         private TcpClient associatedClient;
@@ -225,7 +226,8 @@ namespace TSystems.RELOAD
     /// <summary>
     /// The client part of the "servent"
     /// </summary>
-    internal class ReloadTLSClient : IAssociation
+    //internal class ReloadTLSClient : IAssociation
+    public class ReloadTLSClient : IAssociation // changed class to public, to allow as out param for StartReloadTLSClient() method
     {
         private Socket associatedSocket;
         private TcpClient associatedClient;
@@ -329,8 +331,10 @@ namespace TSystems.RELOAD
         List<ReloadConnectionTableInfoElement> ConnectionTable { get; }
 
         // markus
-        void StartReloadTLSServer(Socket socket);
-        void StartReloadTLSClient(NodeId nodeid, Socket socket, IPEndPoint attacherEndpoint);
+        void StartReloadTLSServer(Socket socket, bool isForAppAttach, out ReloadTLSServer reloadserver);
+
+        void StartReloadTLSClient(NodeId nodeid, Socket socket, IPEndPoint attacherEndpoint, bool isForAppAttach, out ReloadTLSClient reloadclient); //// TODO: change param to String attacher
+        //void StartReloadTLSClient(NodeId nodeid, Socket socket, String attacher, bool isForAppAttach, out ReloadTLSClient reloadclient);
         void SaveConnection(CandidatePair choosenPair);
         Socket GetConnection(CandidatePair choosenPair);
 
