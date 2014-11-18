@@ -412,8 +412,21 @@ namespace TSystems.RELOAD.Enroll {
 
       if(ReloadGlobals.SelfSignPermitted)
       {
-          String subjectName = "reload:" + ReloadGlobals.IPAddressFromHost(m_ReloadConfig, ReloadGlobals.HostName).ToString() + ":" + m_ReloadConfig.ListenPort;
-          //string subjectName = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.CN;
+          // A certain pattern for Subject for thebootstrap node is required in linkSend (TLS.cs) in the current version
+          // set Subject for bs node to reload:<ip>:<port> --arc 
+          // TODO: get rid of this requirement
+          String subjectName;
+          if (m_ReloadConfig.Document.Overlay.configuration.bootstrapnode[0].address == ReloadGlobals.IPAddressFromHost(m_ReloadConfig, ReloadGlobals.HostName).ToString()
+              && m_ReloadConfig.Document.Overlay.configuration.bootstrapnode[0].port == m_ReloadConfig.ListenPort) // bootstrap node
+          {
+              subjectName = "reload:" + ReloadGlobals.IPAddressFromHost(m_ReloadConfig, ReloadGlobals.HostName).ToString() + ":" + m_ReloadConfig.ListenPort;
+          }
+          else
+          {
+              // for all nodes but the bootstrapo node the Subject is arbitrary
+              // To force unique Subject names for each node concatenate the name with ip and listen port --arc
+              subjectName = EnrollmentSettings.Default.CN + ":" + ReloadGlobals.IPAddressFromHost(m_ReloadConfig, ReloadGlobals.HostName).ToString() + ":" + m_ReloadConfig.ListenPort; ;
+          }
           X509Certificate2 cert = Utils.X509Utils.CreateSelfSignedCertificateCOM(subjectName);
 
           m_ReloadConfig.ReloadLocalNetCertStorage.Add(cert, true);

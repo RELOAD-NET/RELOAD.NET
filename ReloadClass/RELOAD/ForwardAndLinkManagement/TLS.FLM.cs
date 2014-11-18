@@ -57,15 +57,13 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
         }
 
 
-        public void StartReloadTLSClient(NodeId nodeid, Socket socket, IPEndPoint attacherEndpoint, bool isForAppAttach, out ReloadTLSClient reloadclient) //// TODO: change the IPEndpoint param to String attacher (Subject name from cert)
-        //public void StartReloadTLSClient(NodeId nodeid, Socket socket, String attacher, bool isForAppAttach, out ReloadTLSClient reloadclient)
+        public void StartReloadTLSClient(NodeId nodeid, Socket socket, String targetHost, bool isForAppAttach, out ReloadTLSClient reloadclient)
         {
             // simply call InitReloadTLSClient
             ReloadSendParameters send_params = new ReloadSendParameters();
-            send_params.destinationAddress = attacherEndpoint.Address; //// TODO: this info is also available in socket, don't need attacherEndpoint param for this
-            //send_params.destinationAddress = ((IPEndPoint)socket.RemoteEndPoint).Address;
+            send_params.destinationAddress = ((IPEndPoint)socket.RemoteEndPoint).Address;
             ReloadTLSClient client;
-            link.InitReloadTLSClient(send_params, socket, attacherEndpoint, isForAppAttach, out client);
+            link.InitReloadTLSClient(send_params, socket, targetHost, isForAppAttach, out client);
 
             if (send_params.connectionTableEntry != null)
             {

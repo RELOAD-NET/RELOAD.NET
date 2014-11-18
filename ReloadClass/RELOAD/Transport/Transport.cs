@@ -3024,22 +3024,20 @@ namespace TSystems.RELOAD.Transport
                                     // get connection
                                     Socket socket = GetForwardingAndLinkManagementLayer().GetConnection(choosenPair);
 
-                                    //// TODO: change param to String attacher (look a few lines below)
+                                    /* update: get targetHost from Subject in attachers certificate
                                     // Get IPAdress and Port of the attacher from attachers certificate cn
                                     System.Security.Cryptography.X509Certificates.X509Certificate2 tempcert = new System.Security.Cryptography.X509Certificates.X509Certificate2(recmsg.security_block.Certificates[0].Certificate);
                                     IPEndPoint attacherEndpoint =
                                         new IPEndPoint(IPAddress.Parse(tempcert.SubjectName.Name.ToString().Split(':')[1]),
-                                                       Convert.ToInt32( tempcert.SubjectName.Name.ToString().Split(':')[2]));
+                                                       Convert.ToInt32( tempcert.SubjectName.Name.ToString().Split(':')[2])); */
 
-                                    /*
                                     // get Subject from attachers certificate
                                     System.Security.Cryptography.X509Certificates.X509Certificate2 tempcert = new System.Security.Cryptography.X509Certificates.X509Certificate2(recmsg.security_block.Certificates[0].Certificate);
-                                    String attacher = tempcert.Subject;
-                                     */
+                                    String targetHost = tempcert.Subject.Substring(3); // Substring to cut the "CN="
 
                                     // StartReloadTLSClient
                                     ReloadTLSClient reloadclient;
-                                    GetForwardingAndLinkManagementLayer().StartReloadTLSClient(OriginatorID, socket, attacherEndpoint, false, out reloadclient);
+                                    GetForwardingAndLinkManagementLayer().StartReloadTLSClient(OriginatorID, socket, targetHost, false, out reloadclient);
 
                                     // for all candidates send_params.done = true
                                     for (int i = 0; i < checkList.candidatePairs.Count; i++)
@@ -3578,23 +3576,21 @@ namespace TSystems.RELOAD.Transport
                                     // get connection
                                     Socket socket = GetForwardingAndLinkManagementLayer().GetConnection(choosenPair);
 
-                                    //// TODO: change param to String attacher (look a few lines below)
+                                    /* update: get targetHost from Subject in attachers certificate
                                     // Get IPAdress and Port of the attacher from attachers certificate cn
                                     System.Security.Cryptography.X509Certificates.X509Certificate2 tempcert = new System.Security.Cryptography.X509Certificates.X509Certificate2(recmsg.security_block.Certificates[0].Certificate);
                                     IPEndPoint attacherEndpoint =
                                         new IPEndPoint(IPAddress.Parse(tempcert.SubjectName.Name.ToString().Split(':')[1]),
-                                                       Convert.ToInt32(tempcert.SubjectName.Name.ToString().Split(':')[2]));
+                                                       Convert.ToInt32(tempcert.SubjectName.Name.ToString().Split(':')[2])); */
 
 
-                                    /*
                                     // get Subject from attachers certificate
                                     System.Security.Cryptography.X509Certificates.X509Certificate2 tempcert = new System.Security.Cryptography.X509Certificates.X509Certificate2(recmsg.security_block.Certificates[0].Certificate);
-                                    String attacher = tempcert.Subject;
-                                     */
+                                    String targetHost = tempcert.Subject.Substring(3); // Substring to cut the "CN=";
 
                                     // StartReloadTLSClient
                                     ReloadTLSClient reloadclient;
-                                    GetForwardingAndLinkManagementLayer().StartReloadTLSClient(OriginatorID, socket, attacherEndpoint, true, out reloadclient);
+                                    GetForwardingAndLinkManagementLayer().StartReloadTLSClient(OriginatorID, socket, targetHost, true, out reloadclient);
 
                                     IUsage usage = null;
 

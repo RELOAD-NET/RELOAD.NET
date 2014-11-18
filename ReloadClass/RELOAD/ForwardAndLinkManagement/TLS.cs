@@ -504,18 +504,16 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 // code encapsulated in method for easy reuse in ICE processing
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("linkSend: Authenticating as Client on {0}", socket.LocalEndPoint));
 
-                //// TODO: change InitReloadTLSClient and StartReloadTLSClient IPEndpoint  attacherEndpoint param to String attacher (== Subject from attacher certificate)
-
                 /* connectionTableEntry is only null if NO ICE is used, or the remote node is a bootstrap
                  * problem: no name or node id of the bootstrap node is known here, only info are íce candidates and send params
                  *          so in this case here you can't get the Subject from certificate
                  * solution: for now we assume that the Subject field in the bootstrap peers certificate is equal to "reload:<ip>:<port>"
                  *           TODO: get rid of this requirement --arc
                  */
+                String targetHost = "reload:" + send_params.destinationAddress.ToString() + ":" + send_params.port.ToString();
 
-                IPEndPoint attacherEndpoint = new IPEndPoint(send_params.destinationAddress, send_params.port); 
                 ReloadTLSClient reloadclient;
-                InitReloadTLSClient(send_params, socket, attacherEndpoint, false, out reloadclient);
+                InitReloadTLSClient(send_params, socket, targetHost, false, out reloadclient);
                                 
             }
 
@@ -580,8 +578,9 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 {
                     // code encapsulated in method for easy reuse in ICE processing
                     ReloadTLSClient reloadclient;
+                    String targetHost = "";
                     m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("ICElinkSend: Authenticating as Client on {0}", send_params.connectionSocket.LocalEndPoint));
-                    InitReloadTLSClient(send_params, send_params.connectionSocket, new IPEndPoint(IPAddress.Any, 0), false, out reloadclient /*ICElinkSend is never used, so the attacherEndpoint and isForAppAttach param does not matter*/);
+                    InitReloadTLSClient(send_params, send_params.connectionSocket, targetHost, false, out reloadclient /*ICElinkSend is never used, so the attacherEndpoint and isForAppAttach param does not matter*/);
                 }
                 else
                 {
@@ -614,7 +613,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 association.TLSConnectionWaitQueue.Enqueue(send_params.buffer);
         }
 
-        public void InitReloadTLSClient(ReloadSendParameters send_params, Socket socket, IPEndPoint attacherEndpoint, bool isForAppAttach, out ReloadTLSClient reloadclient)
+        public void InitReloadTLSClient(ReloadSendParameters send_params, Socket socket, String targetHost, bool isForAppAttach, out ReloadTLSClient reloadclient)
         {
             ReloadTLSClient reload_client = new ReloadTLSClient(socket);
             reload_client.AssociatedClient = new TcpClient();
@@ -638,17 +637,12 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 if (m_ReloadConfig.RootCertificate != null) // root cert is null when using self signed certs
                     certificates.Add(m_ReloadConfig.RootCertificate);
 
-
                 // Debug
                 //File.WriteAllBytes("MyCertificate_Client_Debug.cer", m_ReloadConfig.MyCertificate.Export(X509ContentType.Cert));
                 //File.WriteAllBytes("RootCertificate_Client_Debug.cer", m_ReloadConfig.RootCertificate.Export(X509ContentType.Cert));
-
-                String remoteClient = "reload:" + attacherEndpoint.Address.ToString() + ":" + attacherEndpoint.Port.ToString(); //// TODO: change attacherEndpoint param to "attacher" that is equal to subject from attachers certificate (then you don't have to build it here and don't need any requirements on subject names!!!)
-
-                //String remoteClient = TSystems.RELOAD.Enroll.EnrollmentSettings.Default.CN;
                 
                 // The server name must match the name on the server certificate. 
-                reload_client.AssociatedSslStream.AuthenticateAsClient(remoteClient, certificates, SslProtocols.Tls, false);
+                reload_client.AssociatedSslStream.AuthenticateAsClient(targetHost, certificates, SslProtocols.Tls, false);
 
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("TLS_C: TLS Connection established: Protocol: {0}, Key exchange: {1} strength {2}, Hash: {3} strength {4}, Cipher: {5} strength {6}, IsEncrypted: {7}, IsSigned: {8}",
                     reload_client.AssociatedSslStream.SslProtocol,

@@ -333,8 +333,8 @@ namespace TSystems.RELOAD
         // markus
         void StartReloadTLSServer(Socket socket, bool isForAppAttach, out ReloadTLSServer reloadserver);
 
-        void StartReloadTLSClient(NodeId nodeid, Socket socket, IPEndPoint attacherEndpoint, bool isForAppAttach, out ReloadTLSClient reloadclient); //// TODO: change param to String attacher
-        //void StartReloadTLSClient(NodeId nodeid, Socket socket, String attacher, bool isForAppAttach, out ReloadTLSClient reloadclient);
+        void StartReloadTLSClient(NodeId nodeid, Socket socket, String targetHost, bool isForAppAttach, out ReloadTLSClient reloadclient);
+
         void SaveConnection(CandidatePair choosenPair);
         Socket GetConnection(CandidatePair choosenPair);
 
