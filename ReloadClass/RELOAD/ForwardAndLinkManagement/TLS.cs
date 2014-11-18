@@ -505,7 +505,14 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("linkSend: Authenticating as Client on {0}", socket.LocalEndPoint));
 
                 //// TODO: change InitReloadTLSClient and StartReloadTLSClient IPEndpoint  attacherEndpoint param to String attacher (== Subject from attacher certificate)
-                ////       a fetch for the CertificateStore usage can give you the Subject here.
+
+                /* connectionTableEntry is only null if NO ICE is used, or the remote node is a bootstrap
+                 * problem: no name or node id of the bootstrap node is known here, only info are íce candidates and send params
+                 *          so in this case here you can't get the Subject from certificate
+                 * solution: for now we assume that the Subject field in the bootstrap peers certificate is equal to "reload:<ip>:<port>"
+                 *           TODO: get rid of this requirement --arc
+                 */
+
                 IPEndPoint attacherEndpoint = new IPEndPoint(send_params.destinationAddress, send_params.port); 
                 ReloadTLSClient reloadclient;
                 InitReloadTLSClient(send_params, socket, attacherEndpoint, false, out reloadclient);
@@ -1020,7 +1027,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
         internal IEnumerator<ITask> Send(Node node, ReloadSendParameters send_params)
         {
             //yield return Arbiter.ExecuteToCompletion(m_DispatcherQueue, new IterativeTask<Node, ReloadSendParameters>(node, send_params, linkSend)); //original
-
+            
             //markus
             if (send_params.connectionSocket == null)
                 yield return Arbiter.ExecuteToCompletion(m_DispatcherQueue, new IterativeTask<Node, ReloadSendParameters>(node, send_params, linkSend));

@@ -389,7 +389,7 @@ namespace TSystems.RELOAD.ForwardAndLinkManagement
                                                 // markus
                                                 connectionSocket = null,
                                             };
-
+                                           
                                             //send_params.done.Post(false);
 
                                             //connectionQueue[candidate.addr_port] = send_params;
