@@ -92,22 +92,22 @@ namespace TSystems.RELOAD.Application // --arc
 
                 m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, "Controlling Agent starting application layer communication over direct conection");
 
-                //switch(ApplicationID)
-                //{
-                //    case (UInt16)Application_ID.IMAGE_STORE:
+                switch(ApplicationID)
+                {
+                    case (UInt16)Application_ID.IMAGE_STORE:
                         ImageStoreApplication app = new ImageStoreApplication();
                         app.ControllingAgentAppProtocol(association, (ImageStoreUsage)this.Usage, this.m_ReloadConfig); // controlling agent app specific protocol
-                //        break;
+                        break;
 
-                //    case (UInt16)Application_ID.SIP_REGISTRATION:
-                //        break;
+                    case (UInt16)Application_ID.SIP_REGISTRATION:
+                        break;
 
-                //    case (UInt16)Application_ID.INVALID:
-                //        break;
+                    case (UInt16)Application_ID.INVALID:
+                        break;
 
-                //    default:
-                //        break;
-                //}
+                    default:
+                        break;
+                }
             }
             else // --> controlled agent
             {

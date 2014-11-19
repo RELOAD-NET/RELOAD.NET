@@ -937,58 +937,11 @@ Predecessor cache:";
                o  The Node-ID in the certificate. (CERTIFICATE_BY_NODE)
          * --arc
          */
-
+          
         if (m_ReloadConfig.Document.Overlay.configuration.bootstrapnode[0].address == ReloadGlobals.IPAddressFromHost(m_ReloadConfig, ReloadGlobals.HostName).ToString()
             && m_ReloadConfig.Document.Overlay.configuration.bootstrapnode[0].port == m_ReloadConfig.ListenPort) // bootstrap node
         {
-            // CERTIFICATE_BY_NODE
-            string resourcename = ReloadConfig.LocalNodeID.ToString();
-            object[] args = new object[4];
-            args[0] = resourcename;
-            args[1] = ReloadConfig.MyCertificate.Subject.Substring(3); // Substring to cut the "CN=";
-            args[2] = ReloadConfig.LocalNodeID;
-            args[3] = ReloadConfig.MyCertificate.RawData;
-
-
-            //IUsage certByNode = new CertificateStore(true, m_machine.UsageManager);
-            IUsage certByNode = UsageManager.CreateUsage(Usage_Code_Point.CERTIFICATE_STORE_BY_NODE, 0, args);
-            certByNode.ResourceName = resourcename;
-
-            List<StoreKindData> skdList = new List<StoreKindData>();
-            StoreKindData certKindData = new StoreKindData(certByNode.KindId, 0, new StoredData(certByNode.Encapsulate(true)));
-            skdList.Add(certKindData);
-
-            if (m_transport.StoreDone == null) { m_transport.StoreDone = new Port<ReloadDialog>(); } // instanciate storeDone port that Store method can post
-            Arbiter.Activate(m_ReloadConfig.DispatcherQueue, new IterativeTask<string, List<StoreKindData>>(resourcename, skdList, m_transport.Store));
-
-            Arbiter.Activate(m_ReloadConfig.DispatcherQueue,
-                Arbiter.Receive(false, m_transport.StoreDone,
-                    delegate(ReloadDialog dialog)
-                    {
-                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("Init(): Bootrstrap-Node {0} CERTIFICATE_STORE_BY_NODE done!", m_ReloadConfig.LocalNodeID));
-                    }
-                ));
-
-            // CERTIFICATE_BY_USER
-            resourcename = ReloadConfig.MyCertificate.Subject.Substring(3); // Substring to cut the "CN="
-            args[0] = resourcename;
-
-            IUsage certByUser = UsageManager.CreateUsage(Usage_Code_Point.CERTIFICATE_STORE_BY_USER, 0, args);
-            certByNode.ResourceName = resourcename;
-
-            skdList = new List<StoreKindData>();
-            certKindData = new StoreKindData(certByUser.KindId, 0, new StoredData(certByUser.Encapsulate(true)));
-            skdList.Add(certKindData);
-
-            Arbiter.Activate(m_ReloadConfig.DispatcherQueue, new IterativeTask<string, List<StoreKindData>>(resourcename, skdList, m_transport.Store));
-
-            Arbiter.Activate(m_ReloadConfig.DispatcherQueue,
-                Arbiter.Receive(false, m_transport.StoreDone,
-                    delegate(ReloadDialog dialog)
-                    {
-                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("Init(): Bootrstrap-Node {0} CERTIFICATE_STORE_BY_USER done!", m_ReloadConfig.LocalNodeID));
-                    }
-                ));
+            m_transport.StoreCertificateInOverlay();
         }
          /***************************************************************************/
 

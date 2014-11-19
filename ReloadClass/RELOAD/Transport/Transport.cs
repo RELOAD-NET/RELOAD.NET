@@ -600,6 +600,63 @@ namespace TSystems.RELOAD.Transport
             }
         }
 
+        /// <summary>
+        /// StoreCertificateInOverlay
+        /// Stores the nodes certificate at ResourceID's derived from:
+        ///     o  The user name in the certificate. (CERTIFICATE_BY_USER )
+        ///     o  The Node-ID in the certificate. (CERTIFICATE_BY_NODE)
+        /// See RFC 6940 Chapter 8 (Certificate Store Usage)
+        /// </summary>
+        public void StoreCertificateInOverlay()
+        {
+            // CERTIFICATE_BY_NODE
+            string resourcename = m_machine.ReloadConfig.LocalNodeID.ToString();
+            object[] args = new object[4];
+            args[0] = resourcename;
+            args[1] = m_machine.ReloadConfig.MyCertificate.Subject.Substring(3); // Substring to cut the "CN=";
+            args[2] = m_machine.ReloadConfig.LocalNodeID;
+            args[3] = m_machine.ReloadConfig.MyCertificate.RawData;
+
+            IUsage certByNode = m_machine.UsageManager.CreateUsage(Usage_Code_Point.CERTIFICATE_STORE_BY_NODE, 0, args);
+            certByNode.ResourceName = resourcename;
+
+            List<StoreKindData> skdList = new List<StoreKindData>();
+            StoreKindData certKindData = new StoreKindData(certByNode.KindId, 0, new StoredData(certByNode.Encapsulate(true)));
+            skdList.Add(certKindData);
+
+            if (this.storeDone == null) { this.storeDone = new Port<ReloadDialog>(); } // instanciate storeDone port that Store method can post
+            Arbiter.Activate(m_DispatcherQueue, new IterativeTask<string, List<StoreKindData>>(resourcename, skdList, Store));
+
+            Arbiter.Activate(m_DispatcherQueue,
+                Arbiter.Receive(false, this.StoreDone,
+                    delegate(ReloadDialog dialog)
+                    {
+                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("PreJoinProcedure: Node {0} CERTIFICATE_STORE_BY_NODE done!", m_ReloadConfig.LocalNodeID));
+                    }
+                ));
+
+            // CERTIFICATE_BY_USER
+            resourcename = m_machine.ReloadConfig.MyCertificate.Subject.Substring(3); // Substring to cut the "CN="
+            args[0] = resourcename;
+
+            IUsage certByUser = m_machine.UsageManager.CreateUsage(Usage_Code_Point.CERTIFICATE_STORE_BY_USER, 0, args);
+            certByNode.ResourceName = resourcename;
+
+            skdList = new List<StoreKindData>();
+            certKindData = new StoreKindData(certByUser.KindId, 0, new StoredData(certByUser.Encapsulate(true)));
+            skdList.Add(certKindData);
+
+            Arbiter.Activate(m_DispatcherQueue, new IterativeTask<string, List<StoreKindData>>(resourcename, skdList, Store));
+
+            Arbiter.Activate(m_DispatcherQueue,
+                Arbiter.Receive(false, this.StoreDone,
+                    delegate(ReloadDialog dialog)
+                    {
+                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("PreJoinProcedure: Node {0} CERTIFICATE_STORE_BY_USER done!", m_ReloadConfig.LocalNodeID));
+                    }
+                ));
+        }
+
         public IEnumerator<ITask> PreJoinProdecure(List<BootstrapServer> BootstrapServerList)
         {
             bool attached = false;
@@ -987,52 +1044,7 @@ namespace TSystems.RELOAD.Transport
                                          * --arc
                                          */
 
-                                        // CERTIFICATE_BY_NODE
-                                        string resourcename = m_machine.ReloadConfig.LocalNodeID.ToString();
-                                        object[] args = new object[4];
-                                        args[0] = resourcename;
-                                        args[1] = m_machine.ReloadConfig.MyCertificate.Subject.Substring(3); // Substring to cut the "CN=";
-                                        args[2] = m_machine.ReloadConfig.LocalNodeID; 
-                                        args[3] = m_machine.ReloadConfig.MyCertificate.RawData;
-
-                                        IUsage certByNode = m_machine.UsageManager.CreateUsage(Usage_Code_Point.CERTIFICATE_STORE_BY_NODE, 0, args);
-                                        certByNode.ResourceName = resourcename;
-
-                                        List<StoreKindData> skdList = new List<StoreKindData>();
-                                        StoreKindData certKindData = new StoreKindData(certByNode.KindId, 0, new StoredData(certByNode.Encapsulate(true)));
-                                        skdList.Add(certKindData);
-
-                                        if (this.storeDone == null) { this.storeDone = new Port<ReloadDialog>(); } // instanciate storeDone port that Store method can post
-                                        Arbiter.Activate(m_DispatcherQueue, new IterativeTask<string, List<StoreKindData>>(resourcename, skdList, Store));
-
-                                        Arbiter.Activate(m_DispatcherQueue,
-                                            Arbiter.Receive(false, this.StoreDone,
-                                                delegate(ReloadDialog dialog)
-                                                {
-                                                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("PreJoinProcedure: Node {0} CERTIFICATE_STORE_BY_NODE done!", m_ReloadConfig.LocalNodeID));
-                                                }
-                                            ));
-
-                                        // CERTIFICATE_BY_USER
-                                        resourcename = m_machine.ReloadConfig.MyCertificate.Subject.Substring(3); // Substring to cut the "CN="
-                                        args[0] = resourcename;
-
-                                        IUsage certByUser = m_machine.UsageManager.CreateUsage(Usage_Code_Point.CERTIFICATE_STORE_BY_USER, 0, args);
-                                        certByNode.ResourceName = resourcename;
-
-                                        skdList = new List<StoreKindData>();
-                                        certKindData = new StoreKindData(certByUser.KindId, 0, new StoredData(certByUser.Encapsulate(true)));
-                                        skdList.Add(certKindData);
-
-                                        Arbiter.Activate(m_DispatcherQueue, new IterativeTask<string, List<StoreKindData>>(resourcename, skdList, Store));
-
-                                        Arbiter.Activate(m_DispatcherQueue,
-                                            Arbiter.Receive(false, this.StoreDone,
-                                                delegate(ReloadDialog dialog)
-                                                {
-                                                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("PreJoinProcedure: Node {0} CERTIFICATE_STORE_BY_USER done!", m_ReloadConfig.LocalNodeID));
-                                                }
-                                            ));
+                                        StoreCertificateInOverlay();
                                         /***************************************************************************/
 
                                     }
