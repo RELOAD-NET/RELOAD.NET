@@ -924,6 +924,57 @@ Predecessor cache:";
         ReloadConfig.State = ReloadConfig.RELOAD_State.Configured;
         stateUpdates(ReloadConfig.RELOAD_State.Configured);
 
+        /***************************************************************************
+         * Bootstrap nodes certificate stores */
+
+        /* RFC Ch. 11.3.1 Self-Generated Credentials
+         * Once the node has constructed a self-signed certificate, it MAY join the overlay.
+         * It MUST store its certificate in the overlay (Section 8), but SHOULD look to see if the user name is already taken and, if so, choose another user name.
+         *
+         * RFC Ch. 8
+         *  A user/node MUST store its certificate at Resource-IDs derived from two Resource Names:
+               o  The user name in the certificate. (CERTIFICATE_BY_USER )
+               o  The Node-ID in the certificate. (CERTIFICATE_BY_NODE)
+         * --arc
+         */
+
+        if (m_ReloadConfig.Document.Overlay.configuration.bootstrapnode[0].address == ReloadGlobals.IPAddressFromHost(m_ReloadConfig, ReloadGlobals.HostName).ToString()
+            && m_ReloadConfig.Document.Overlay.configuration.bootstrapnode[0].port == m_ReloadConfig.ListenPort) // bootstrap node
+        {
+            // CERTIFICATE_BY_NODE
+            string resourcename = ReloadConfig.LocalNodeID.ToString();
+            object[] args = new object[4];
+            args[0] = resourcename;
+            args[1] = ReloadConfig.MyCertificate.Subject.Substring(3); // Substring to cut the "CN=";
+            args[2] = ReloadConfig.LocalNodeID;
+            args[3] = ReloadConfig.MyCertificate.RawData;
+
+
+            //IUsage certByNode = new CertificateStore(true, m_machine.UsageManager);
+            IUsage certByNode = UsageManager.CreateUsage(Usage_Code_Point.CERTIFICATE_STORE_BY_NODE, 0, args);
+            certByNode.ResourceName = resourcename;
+
+            List<StoreKindData> skdList = new List<StoreKindData>();
+            StoreKindData certKindData = new StoreKindData(certByNode.KindId, 0, new StoredData(certByNode.Encapsulate(true)));
+            skdList.Add(certKindData);
+
+            Arbiter.Activate(m_ReloadConfig.DispatcherQueue, new IterativeTask<string, List<StoreKindData>>(resourcename, skdList, m_transport.Store));
+
+            // CERTIFICATE_BY_USER
+            resourcename = ReloadConfig.MyCertificate.Subject.Substring(3); // Substring to cut the "CN="
+            args[0] = resourcename;
+
+            IUsage certByUser = UsageManager.CreateUsage(Usage_Code_Point.CERTIFICATE_STORE_BY_USER, 0, args);
+            certByNode.ResourceName = resourcename;
+
+            skdList = new List<StoreKindData>();
+            certKindData = new StoreKindData(certByUser.KindId, 0, new StoredData(certByUser.Encapsulate(true)));
+            skdList.Add(certKindData);
+
+            Arbiter.Activate(m_ReloadConfig.DispatcherQueue, new IterativeTask<string, List<StoreKindData>>(resourcename, skdList, m_transport.Store));
+        }
+         /***************************************************************************/
+
         /* reporting service */
         Arbiter.Activate(ReloadConfig.DispatcherQueue, new IterativeTask(Reporting));
         /* chord-ping-interval */

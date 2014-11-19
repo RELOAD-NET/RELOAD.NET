@@ -973,7 +973,9 @@ namespace TSystems.RELOAD.Transport
 
                                         m_topology.routing_table.SendUpdateToAllNeighbors();
 
-                                        
+                                        /***************************************************************************
+                                         * certificate stores for non bootstrap node peers */
+
                                         /* RFC Ch. 11.3.1 Self-Generated Credentials
                                          * Once the node has constructed a self-signed certificate, it MAY join the overlay.
                                          * It MUST store its certificate in the overlay (Section 8), but SHOULD look to see if the user name is already taken and, if so, choose another user name.
@@ -985,12 +987,11 @@ namespace TSystems.RELOAD.Transport
                                          * --arc
                                          */
 
-
                                         // CERTIFICATE_BY_NODE
                                         string resourcename = m_machine.ReloadConfig.LocalNodeID.ToString();
                                         object[] args = new object[4];
                                         args[0] = resourcename;
-                                        args[1] = m_machine.ReloadConfig.MyCertificate.Subject;
+                                        args[1] = m_machine.ReloadConfig.MyCertificate.Subject.Substring(3); // Substring to cut the "CN=";
                                         args[2] = m_machine.ReloadConfig.LocalNodeID; 
                                         args[3] = m_machine.ReloadConfig.MyCertificate.RawData;
 
@@ -1004,15 +1005,11 @@ namespace TSystems.RELOAD.Transport
                                         skdList.Add(certKindData);
 
                                         Arbiter.Activate(m_DispatcherQueue, new IterativeTask<string, List<StoreKindData>>(resourcename, skdList, Store));
-                                     
-
                                         //m_machine.GatherCommandsInQueue("Store", Usage_Code_Point.CERTIFICATE_STORE_BY_NODE, 0, null, true, args);
                                         //m_machine.SendCommand("Store");
 
-
-
                                         // CERTIFICATE_BY_USER
-                                        resourcename = m_machine.ReloadConfig.MyCertificate.Subject;
+                                        resourcename = m_machine.ReloadConfig.MyCertificate.Subject.Substring(3); // Substring to cut the "CN="
                                         args[0] = resourcename;
 
                                         IUsage certByUser = m_machine.UsageManager.CreateUsage(Usage_Code_Point.CERTIFICATE_STORE_BY_USER, 0, args);
@@ -1023,7 +1020,7 @@ namespace TSystems.RELOAD.Transport
                                         skdList.Add(certKindData);
 
                                         Arbiter.Activate(m_DispatcherQueue, new IterativeTask<string, List<StoreKindData>>(resourcename, skdList, Store));
-
+                                        /***************************************************************************/
 
                                     }
                                     else
@@ -2121,7 +2118,6 @@ namespace TSystems.RELOAD.Transport
                     int RetransmissionTime = ReloadGlobals.RetransmissionTime + ReloadGlobals.MaxTimeToSendPacket;
 
                     int iRetrans = ReloadGlobals.MaxRetransmissions;
-
                     while (iRetrans >= 0 && m_ReloadConfig.State < ReloadConfig.RELOAD_State.Exit)
                     {
                         try
@@ -2142,7 +2138,6 @@ namespace TSystems.RELOAD.Transport
 
                         if (!reloadDialog.Error && reloadDialog.ReceivedMessage != null)
                             break;
-
 
                         /* If a response has not been received when the timer fires, the request
                            is retransmitted with the same transaction identifier. 
