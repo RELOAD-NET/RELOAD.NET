@@ -2,13 +2,6 @@ bin/
 obj/
 *.suo
 SBBKeys.cs
-ReloadClass/app.config
-ReloadClass/RELOAD/Enroll/EnrollmentSettings.Designer.cs
-ReloadClass/RELOAD/Enroll/EnrollmentSettings.settings
-ReloadGUI/app.config
-ReloadGUI/Properties/Settings.Designer.cs
-ReloadGUI/Properties/Settings.settings
-ReloadClass/app.config
 ReloadClass/RELOAD/Enroll/EnrollmentSettings.Designer.cs
 ReloadClass/RELOAD/Enroll/EnrollmentSettings.settings
 ReloadGUI/app.config
