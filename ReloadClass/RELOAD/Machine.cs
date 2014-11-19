@@ -958,7 +958,16 @@ Predecessor cache:";
             StoreKindData certKindData = new StoreKindData(certByNode.KindId, 0, new StoredData(certByNode.Encapsulate(true)));
             skdList.Add(certKindData);
 
+            if (m_transport.StoreDone == null) { m_transport.StoreDone = new Port<ReloadDialog>(); } // instanciate storeDone port that Store method can post
             Arbiter.Activate(m_ReloadConfig.DispatcherQueue, new IterativeTask<string, List<StoreKindData>>(resourcename, skdList, m_transport.Store));
+
+            Arbiter.Activate(m_ReloadConfig.DispatcherQueue,
+                Arbiter.Receive(false, m_transport.StoreDone,
+                    delegate(ReloadDialog dialog)
+                    {
+                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("Init(): Bootrstrap-Node {0} CERTIFICATE_STORE_BY_NODE done!", m_ReloadConfig.LocalNodeID));
+                    }
+                ));
 
             // CERTIFICATE_BY_USER
             resourcename = ReloadConfig.MyCertificate.Subject.Substring(3); // Substring to cut the "CN="
@@ -972,6 +981,14 @@ Predecessor cache:";
             skdList.Add(certKindData);
 
             Arbiter.Activate(m_ReloadConfig.DispatcherQueue, new IterativeTask<string, List<StoreKindData>>(resourcename, skdList, m_transport.Store));
+
+            Arbiter.Activate(m_ReloadConfig.DispatcherQueue,
+                Arbiter.Receive(false, m_transport.StoreDone,
+                    delegate(ReloadDialog dialog)
+                    {
+                        m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("Init(): Bootrstrap-Node {0} CERTIFICATE_STORE_BY_USER done!", m_ReloadConfig.LocalNodeID));
+                    }
+                ));
         }
          /***************************************************************************/
 

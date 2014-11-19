@@ -995,8 +995,6 @@ namespace TSystems.RELOAD.Transport
                                         args[2] = m_machine.ReloadConfig.LocalNodeID; 
                                         args[3] = m_machine.ReloadConfig.MyCertificate.RawData;
 
-                                      
-                                        //IUsage certByNode = new CertificateStore(true, m_machine.UsageManager);
                                         IUsage certByNode = m_machine.UsageManager.CreateUsage(Usage_Code_Point.CERTIFICATE_STORE_BY_NODE, 0, args);
                                         certByNode.ResourceName = resourcename;
 
@@ -1004,9 +1002,16 @@ namespace TSystems.RELOAD.Transport
                                         StoreKindData certKindData = new StoreKindData(certByNode.KindId, 0, new StoredData(certByNode.Encapsulate(true)));
                                         skdList.Add(certKindData);
 
+                                        if (this.storeDone == null) { this.storeDone = new Port<ReloadDialog>(); } // instanciate storeDone port that Store method can post
                                         Arbiter.Activate(m_DispatcherQueue, new IterativeTask<string, List<StoreKindData>>(resourcename, skdList, Store));
-                                        //m_machine.GatherCommandsInQueue("Store", Usage_Code_Point.CERTIFICATE_STORE_BY_NODE, 0, null, true, args);
-                                        //m_machine.SendCommand("Store");
+
+                                        Arbiter.Activate(m_DispatcherQueue,
+                                            Arbiter.Receive(false, this.StoreDone,
+                                                delegate(ReloadDialog dialog)
+                                                {
+                                                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("PreJoinProcedure: Node {0} CERTIFICATE_STORE_BY_NODE done!", m_ReloadConfig.LocalNodeID));
+                                                }
+                                            ));
 
                                         // CERTIFICATE_BY_USER
                                         resourcename = m_machine.ReloadConfig.MyCertificate.Subject.Substring(3); // Substring to cut the "CN="
@@ -1020,6 +1025,14 @@ namespace TSystems.RELOAD.Transport
                                         skdList.Add(certKindData);
 
                                         Arbiter.Activate(m_DispatcherQueue, new IterativeTask<string, List<StoreKindData>>(resourcename, skdList, Store));
+
+                                        Arbiter.Activate(m_DispatcherQueue,
+                                            Arbiter.Receive(false, this.StoreDone,
+                                                delegate(ReloadDialog dialog)
+                                                {
+                                                    m_ReloadConfig.Logger(ReloadGlobals.TRACEFLAGS.T_INFO, String.Format("PreJoinProcedure: Node {0} CERTIFICATE_STORE_BY_USER done!", m_ReloadConfig.LocalNodeID));
+                                                }
+                                            ));
                                         /***************************************************************************/
 
                                     }
