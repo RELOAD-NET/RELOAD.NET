@@ -208,6 +208,43 @@ public sealed class ImageStoreUsage : IUsage
 		{
 			ImageStoreUsage usage = (ImageStoreUsage)storedData.Value.GetUsageValue;
 
+
+
+
+            /********************************************************
+             * TEST 
+             * Certificate Fetch
+             * 
+             * Idea: In the future we build a "user-profile" usage, containing a username and 
+             *       some other info. It is also conceivable, that this username determines the 
+             *       subject name in that user's certificate in our app. 
+             *       The certificate store usage allows us to find a subject name if we know the node id and vice versa.
+             *       
+             * Test: For now we just assume that we need to collect some info before we run the app attach and fetch the usage
+             * 
+             * In Machine.CommandCheckTask() is the Receiver for the async fetch task
+             * TODO: register an event handler here to receive result of fetch
+             * --arc
+             */
+            var specifiers = new List<StoredDataSpecifier>();
+            string username = usage.Data.Name;
+            NodeId nodeid = usage.Data.NodeId;
+            CertificateStore cs = new CertificateStore(true, UsageManager);
+            var usg = cs.Create(0, nodeid.ToString(), username, nodeid, UsageManager.m_ReloadConfig.MyCertificate.RawData);
+
+            StoredDataSpecifier specifier = UsageManager.createSpecifier(
+                usg.KindId, nodeid.ToString(), 0 ,0); // args[1] = first index args[2] = last index of ARRAY value
+
+            specifiers.Add(specifier);
+
+            Microsoft.Ccr.Core.Arbiter.Activate(transport.m_DispatcherQueue,
+              new Microsoft.Ccr.Core.IterativeTask<string, List<TSystems.RELOAD.Storage.StoredDataSpecifier>>(
+                  specifiers[0].ResourceName, specifiers, transport.Fetch));
+            /********************************************************/
+
+
+
+
             // Determine the destination node, wich is responsible for the data --arc
             bool direct = false;
             TSystems.RELOAD.Topology.Node destNode = transport.NextHopToDestination(new Destination(new ResourceId(usage.ResourceName)), ref direct);

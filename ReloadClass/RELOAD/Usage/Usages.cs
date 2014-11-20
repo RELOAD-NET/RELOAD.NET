@@ -20,6 +20,9 @@
 * 
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
+#undef MAKE_CERTIFICATE_STORE_APPATTACH
+//#define MAKE_CERTIFICATE_STORE_APPATTACH
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -1346,6 +1349,8 @@ namespace TSystems.RELOAD.Usage {
       if (arguments[0] == null || arguments[1] == null || arguments[2] == null)
         throw new ArgumentNullException("Not enough arguments! Any of the the arguments is null!");
 
+      codePoint = type == 0 ? Usage_Code_Point.CERTIFICATE_STORE_BY_NODE : Usage_Code_Point.CERTIFICATE_STORE_BY_USER;
+
       resourceName = (string)arguments[0];
       length += (UInt32)resourceName.Length;
 
@@ -1443,8 +1448,13 @@ namespace TSystems.RELOAD.Usage {
     }
 
     public void AppProcedure(MessageTransport transport,
-      List<FetchKindResponse> kindResponse) {
-      throw new NotImplementedException("AppProcedure");
+      List<FetchKindResponse> fetchKindResponses)
+    {
+#if MAKE_CERTIFICATE_STORE_APPATTACH // Make AppAttach
+       throw new NotImplementedException("AppProcedure");
+#else // Don't make AppAttach
+        fetchKindResponses.Clear();
+#endif
     }
 
     public string Report()
@@ -1463,7 +1473,8 @@ namespace TSystems.RELOAD.Usage {
     }
 
     public UInt32 KindId {
-      get { return (UInt32)(byNode ? 3 : 4); }
+      //get { return (UInt32)(byNode ? 3 : 4); }
+        get { return (UInt32)(byNode ? Usage_Code_Point.CERTIFICATE_STORE_BY_NODE : Usage_Code_Point.CERTIFICATE_STORE_BY_USER); }
     }
 
     public ReloadGlobals.DataModel DataModel(){
