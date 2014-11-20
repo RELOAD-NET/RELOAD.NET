@@ -640,7 +640,7 @@ namespace TSystems.RELOAD.Transport
             args[0] = resourcename;
 
             IUsage certByUser = m_machine.UsageManager.CreateUsage(Usage_Code_Point.CERTIFICATE_STORE_BY_USER, 0, args);
-            certByNode.ResourceName = resourcename;
+            certByUser.ResourceName = resourcename;
 
             skdList = new List<StoreKindData>();
             certKindData = new StoreKindData(certByUser.KindId, 0, new StoredData(certByUser.Encapsulate(true)));

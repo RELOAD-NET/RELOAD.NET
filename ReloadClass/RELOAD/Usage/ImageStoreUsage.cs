@@ -59,17 +59,21 @@ public sealed class ImageStoreUsage : IUsage
 	/// </summary>
 	public ImageStoreData Data { get; private set; }
 
-    // Update: Create a new ApplicationConnectivity Object for each transport.AppAttachProcedure call and queue them in Transport.ApplicationConnections port --arc
-    ///// <summary>
-    ///// Application-Layer connectivity
-    ///// </summary>
-    //private ApplicationConnectivity m_ApplicationConnection;
 
-    //internal ApplicationConnectivity ApplicationConnection
-    //{
-    //    get { return m_ApplicationConnection; }
-    //    set { m_ApplicationConnection = value; }
-    //}
+    /// <summary>
+    /// Fetch results are received in Machine.CommandCheckTask and a FetchCompleted event is fired
+    /// This is the required event handler to receive the results here
+    /// </summary>
+    /// <param name="usages"></param>
+    /// <returns></returns>
+    private bool certificateStore_FetchCompleted(List<IUsage> usages) // --arc
+    {
+        var result = usages[0]; // TODO: implement this event handler
+
+        UsageManager.m_ReloadConfig.ThisMachine.FetchCompleted -= new DFetchCompleted(certificateStore_FetchCompleted);
+        return true;
+    }
+
 
 	/// <summary>
 	/// See also the usage registration procedure at <seealso cref="Machine.InitUsageManager"/>.
@@ -222,10 +226,14 @@ public sealed class ImageStoreUsage : IUsage
              *       
              * Test: For now we just assume that we need to collect some info before we run the app attach and fetch the usage
              * 
-             * In Machine.CommandCheckTask() is the Receiver for the async fetch task
-             * TODO: register an event handler here to receive result of fetch
+             * In Machine.CommandCheckTask() is the Receiver for the async fetch task. An event FetchCompleted is fired.
+             * The event handler here, certificateStore_FetchCompleted() receives result of fetch
              * --arc
              */
+
+            // Register event handler fto receive fetch results     
+            UsageManager.m_ReloadConfig.ThisMachine.FetchCompleted += new DFetchCompleted(certificateStore_FetchCompleted);
+
             var specifiers = new List<StoredDataSpecifier>();
             string username = usage.Data.Name;
             NodeId nodeid = usage.Data.NodeId;

@@ -1459,7 +1459,9 @@ namespace TSystems.RELOAD.Usage {
 
     public string Report()
     {
-      return ToString();
+      //return ToString();
+        return String.Format("CertificateStore usage: [Total Usage Length] {0} [ResourceName] {1} [NodeId] {2} [username] {3} [certificate raw data length] {4}",
+                Length, ResourceName, localNodeId, username, certificate.Length);
     }
 
     public string ResourceName
