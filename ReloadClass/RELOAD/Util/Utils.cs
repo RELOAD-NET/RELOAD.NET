@@ -157,7 +157,6 @@ namespace TSystems.RELOAD.Utils {
 
   public static class X509Utils
   {
-
       public static bool VerifyCertificate(X509Certificate2 local, X509Certificate2 root)
       {
           var chain = new X509Chain();
@@ -250,4 +249,69 @@ namespace TSystems.RELOAD.Utils {
           );
       }
   }
+
+
+    // --arc
+    /// <summary>
+    /// Helper class to fetch certificates stored in the overlay by the CertificateStore usage.
+    /// 1. Instanciate a object and supply the Machine param.
+    /// 2. Call FetchCertificateFromOverlay(UInt32 usageCodepoint, String resourceName)
+    /// 3. Attach a Ccr Receiver on the FetchedCertificate property of your object
+    /// 4. The fetched certificate is available in the Receievers handler
+    /// </summary>
+    public class CertificateFetcher
+    {
+        private Machine m_machine;
+        private Microsoft.Ccr.Core.Port<X509Certificate2> m_fetchedCertificate; // Port to post the result of the fetch as a X509Certificate2
+
+        /// <summary>
+        /// Attach a Ccr Receiver to this Port<X509Certificate2>
+        /// In the Receivers Handler e.g. delegate(X509Certificate2 cert){} the result can be accessed
+        /// </summary>
+        public Microsoft.Ccr.Core.Port<X509Certificate2> FetchedCertificate
+        {
+            get { return m_fetchedCertificate; }
+            set { m_fetchedCertificate = value; }
+        }
+
+        public CertificateFetcher(Machine machine)
+        {
+            m_machine = machine;
+            m_fetchedCertificate = new Microsoft.Ccr.Core.Port<X509Certificate2>();
+            m_machine.FetchCompleted += new DFetchCompleted(certificateStore_FetchCompleted);
+        }
+
+        /// <summary>
+        /// Fetch results are received in Machine.CommandCheckTask and a FetchCompleted event is fired
+        /// This is the required event handler to receive the results
+        /// </summary>
+        /// <param name="usages"></param>
+        /// <returns></returns>
+        private bool certificateStore_FetchCompleted(List<TSystems.RELOAD.Usage.IUsage> usages) // --arc
+        {
+            if (usages[0].CodePoint == TSystems.RELOAD.Usage.Usage_Code_Point.CERTIFICATE_STORE_BY_NODE || usages[0].CodePoint == TSystems.RELOAD.Usage.Usage_Code_Point.CERTIFICATE_STORE_BY_USER)
+            {
+                TSystems.RELOAD.Usage.CertificateStore result = (TSystems.RELOAD.Usage.CertificateStore)usages[0];
+                System.Security.Cryptography.X509Certificates.X509Certificate2 cert = new System.Security.Cryptography.X509Certificates.X509Certificate2(result.Certificate);
+
+                m_fetchedCertificate.Post(cert);
+
+                //m_machine.FetchCompleted -= new DFetchCompleted(certificateStore_FetchCompleted);
+            }
+            return true;
+        }
+
+        public X509Certificate2 FetchCertificateFromOverlay(UInt32 usageCodepoint, String resourceName)
+        {
+            var specifiers = new List<TSystems.RELOAD.Storage.StoredDataSpecifier>();
+            TSystems.RELOAD.Storage.StoredDataSpecifier specifier = m_machine.UsageManager.createSpecifier(usageCodepoint, resourceName, 0, 0);  // KindId, args[0] = ResourceId, args[1] = first index, args[2] = last index of ARRAY value
+            specifiers.Add(specifier);
+
+            Microsoft.Ccr.Core.Arbiter.Activate(m_machine.UsageManager.m_ReloadConfig.ThisMachine.Transport.m_DispatcherQueue,
+              new Microsoft.Ccr.Core.IterativeTask<string, List<TSystems.RELOAD.Storage.StoredDataSpecifier>>(
+                  resourceName, specifiers, m_machine.UsageManager.m_ReloadConfig.ThisMachine.Transport.Fetch));
+
+            return null;
+        }
+    }
 }

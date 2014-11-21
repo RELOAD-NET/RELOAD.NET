@@ -60,21 +60,6 @@ public sealed class ImageStoreUsage : IUsage
 	public ImageStoreData Data { get; private set; }
 
 
-    /// <summary>
-    /// Fetch results are received in Machine.CommandCheckTask and a FetchCompleted event is fired
-    /// This is the required event handler to receive the results here
-    /// </summary>
-    /// <param name="usages"></param>
-    /// <returns></returns>
-    private bool certificateStore_FetchCompleted(List<IUsage> usages) // --arc
-    {
-        var result = usages[0]; // TODO: implement this event handler
-
-        UsageManager.m_ReloadConfig.ThisMachine.FetchCompleted -= new DFetchCompleted(certificateStore_FetchCompleted);
-        return true;
-    }
-
-
 	/// <summary>
 	/// See also the usage registration procedure at <seealso cref="Machine.InitUsageManager"/>.
 	/// </summary>
@@ -226,28 +211,24 @@ public sealed class ImageStoreUsage : IUsage
              *       
              * Test: For now we just assume that we need to collect some info before we run the app attach and fetch the usage
              * 
-             * In Machine.CommandCheckTask() is the Receiver for the async fetch task. An event FetchCompleted is fired.
-             * The event handler here, certificateStore_FetchCompleted() receives result of fetch
+             * A new helper class CertificateFetcher is used here to fetch the certificate from overlay.
+             * 1. An object of CertificateFetcher is instanciated with the Machine reference.
+             * 2. FetchCertificateFromOverlay is called with the usage codepoint and resource name as params
+             * 3. A Ccr Receievr is attached to the FetchedCertificate property of the CertificateFetcher instance
+             * 4. The fetched certificate is available in the Receievers handler
              * --arc
              */
+            string resourceName = usage.Data.NodeId.ToString();
+            CertificateFetcher certFetcher = new CertificateFetcher(UsageManager.m_ReloadConfig.ThisMachine);
+            System.Security.Cryptography.X509Certificates.X509Certificate2 cert = certFetcher.FetchCertificateFromOverlay((UInt32)Usage_Code_Point.CERTIFICATE_STORE_BY_NODE, resourceName);
 
-            // Register event handler fto receive fetch results     
-            UsageManager.m_ReloadConfig.ThisMachine.FetchCompleted += new DFetchCompleted(certificateStore_FetchCompleted);
+            Arbiter.Activate(transport.m_DispatcherQueue,
+                Arbiter.Receive<System.Security.Cryptography.X509Certificates.X509Certificate2>(false, certFetcher.FetchedCertificate,
+                delegate(System.Security.Cryptography.X509Certificates.X509Certificate2 resultCert)
+                {
+                    var subject = resultCert.Subject; // TODO: do something with the fetched cert
 
-            var specifiers = new List<StoredDataSpecifier>();
-            string username = usage.Data.Name;
-            NodeId nodeid = usage.Data.NodeId;
-            CertificateStore cs = new CertificateStore(true, UsageManager);
-            var usg = cs.Create(0, nodeid.ToString(), username, nodeid, UsageManager.m_ReloadConfig.MyCertificate.RawData);
-
-            StoredDataSpecifier specifier = UsageManager.createSpecifier(
-                usg.KindId, nodeid.ToString(), 0 ,0); // args[1] = first index args[2] = last index of ARRAY value
-
-            specifiers.Add(specifier);
-
-            Microsoft.Ccr.Core.Arbiter.Activate(transport.m_DispatcherQueue,
-              new Microsoft.Ccr.Core.IterativeTask<string, List<TSystems.RELOAD.Storage.StoredDataSpecifier>>(
-                  specifiers[0].ResourceName, specifiers, transport.Fetch));
+                }));
             /********************************************************/
 
 

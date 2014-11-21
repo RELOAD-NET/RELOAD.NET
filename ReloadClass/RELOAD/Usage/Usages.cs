@@ -1312,12 +1312,42 @@ namespace TSystems.RELOAD.Usage {
     Usage_Code_Point codePoint;
     UsageManager myManager;
     string username;
+
+    public string Username
+    {
+        get { return username; }
+        set { username = value; }
+    }
     NodeId localNodeId;
+
+    public NodeId NodeID
+    {
+        get { return localNodeId; }
+        set { localNodeId = value; }
+    }
     //string certificate;
     byte[] certificate;
+
+    public byte[] Certificate
+    {
+        get { return certificate; }
+        set { certificate = value; }
+    }
     private string resourceName;
+
+    public string ResourceName
+    {
+        get { return this.resourceName; }
+        set { resourceName = value; }
+    }
+
     bool byNode;
     UInt32 length;
+
+    public uint Length
+    {
+        get { return length; }
+    }
 
    /// <summary>
     /// This contructor should be taken if you want to create a RedirServiceProvider from wire.
@@ -1333,9 +1363,6 @@ namespace TSystems.RELOAD.Usage {
       get { return codePoint; }
     }
 
-    public uint Length {
-      get { return length; }
-    }
 
     /// <summary>
     /// Creates new Instances of the Certificate Usage.
@@ -1462,12 +1489,6 @@ namespace TSystems.RELOAD.Usage {
       //return ToString();
         return String.Format("CertificateStore usage: [Total Usage Length] {0} [ResourceName] {1} [NodeId] {2} [username] {3} [certificate raw data length] {4}",
                 Length, ResourceName, localNodeId, username, certificate.Length);
-    }
-
-    public string ResourceName
-    {
-      get { return this.resourceName; }
-      set { resourceName = value; }
     }
 
     public string Name {
