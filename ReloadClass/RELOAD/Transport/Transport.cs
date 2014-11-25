@@ -3029,10 +3029,11 @@ namespace TSystems.RELOAD.Transport
                                     choosenPair = checkList.candidatePairs.First(item => item.nominated == true);
                                 }
 
+                                // TODO: closing this way caused null refs during send
                                 // Close all sockets of all candidate pairs not nominated
-                                for (int i = 0; i < checkList.candidatePairs.Count; i++)
-                                    if ((!checkList.candidatePairs[i].nominated) || (checkList.candidatePairs[i].state != CandidatePairState.Succeeded))
-                                        ICE.CloseAllCandidateSockets(checkList.candidatePairs[i].localCandidate);
+                                //for (int i = 0; i < checkList.candidatePairs.Count; i++)
+                                //    if ((!checkList.candidatePairs[i].nominated) || (checkList.candidatePairs[i].state != CandidatePairState.Succeeded))
+                                //        ICE.CloseAllCandidateSockets(checkList.candidatePairs[i].localCandidate);
 
                                 // add node with chosen remote candidate
                                 if (choosenPair != null)
@@ -3308,10 +3309,11 @@ namespace TSystems.RELOAD.Transport
 
                                         }   // if (any succeeded pair)
 
+                                        // TODO: closing this way caused null refs during send
                                         // Close all sockets of all candidate pairs not nominated
-                                        for (int i = 0; i < checkList.candidatePairs.Count; i++)
-                                            if ((!checkList.candidatePairs[i].nominated) || (checkList.candidatePairs[i].state != CandidatePairState.Succeeded))
-                                                ICE.CloseAllCandidateSockets(checkList.candidatePairs[i].localCandidate);
+                                        //for (int i = 0; i < checkList.candidatePairs.Count; i++)
+                                        //    if ((!checkList.candidatePairs[i].nominated) || (checkList.candidatePairs[i].state != CandidatePairState.Succeeded))
+                                        //        ICE.CloseAllCandidateSockets(checkList.candidatePairs[i].localCandidate);
                                     }
 
                                     #endregion  // ICE
@@ -3564,10 +3566,11 @@ namespace TSystems.RELOAD.Transport
                                     choosenPair = checkList.candidatePairs.First(item => item.nominated == true);
                                 }
 
+                                // TODO: closing this way caused null refs during send
                                 // Close all sockets of all candidate pairs not nominated
-                                for (int i = 0; i < checkList.candidatePairs.Count; i++)
-                                    if ((!checkList.candidatePairs[i].nominated) || (checkList.candidatePairs[i].state != CandidatePairState.Succeeded))
-                                        ICE.CloseAllCandidateSockets(checkList.candidatePairs[i].localCandidate);
+                                //for (int i = 0; i < checkList.candidatePairs.Count; i++)
+                                //    if ((!checkList.candidatePairs[i].nominated) || (checkList.candidatePairs[i].state != CandidatePairState.Succeeded))
+                                //        ICE.CloseAllCandidateSockets(checkList.candidatePairs[i].localCandidate);
 
                                 // add node with chosen remote candidate
                                 if (choosenPair != null)
@@ -3883,10 +3886,11 @@ namespace TSystems.RELOAD.Transport
 
                                         }   // if (any succeeded pair)
 
+                                        // TODO: closing this way caused null refs during send
                                         // Close all sockets of all candidate pairs not nominated
-                                        for (int i = 0; i < checkList.candidatePairs.Count; i++)
-                                            if ((!checkList.candidatePairs[i].nominated) || (checkList.candidatePairs[i].state != CandidatePairState.Succeeded))
-                                                ICE.CloseAllCandidateSockets(checkList.candidatePairs[i].localCandidate);
+                                        //for (int i = 0; i < checkList.candidatePairs.Count; i++)
+                                        //    if ((!checkList.candidatePairs[i].nominated) || (checkList.candidatePairs[i].state != CandidatePairState.Succeeded))
+                                        //        ICE.CloseAllCandidateSockets(checkList.candidatePairs[i].localCandidate);
                                     }
 
                                     #endregion  // ICE
